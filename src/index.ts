@@ -10,6 +10,7 @@ import { getExportsTool, handleGetExports } from "./tools/get-exports.js";
 import { getDependenciesTool, handleGetDependencies } from "./tools/get-dependencies.js";
 import { getStatsTool, handleGetStats } from "./tools/get-stats.js";
 import { reindexTool, handleReindex } from "./tools/reindex.js";
+import { analyzeChangeImpactTool, handleAnalyzeChangeImpact } from "./tools/analyze-impact.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 
@@ -97,6 +98,21 @@ async function main() {
     reindexTool.description,
     {},
     async () => handleReindex(watcher)
+  );
+
+  server.tool(
+    analyzeChangeImpactTool.name,
+    analyzeChangeImpactTool.description,
+    {
+      file_path: z.string().describe("Absolute path to the file being modified"),
+      line_start: z.number().describe("Starting line number of the change (inclusive)"),
+      line_end: z.number().describe("Ending line number of the change (inclusive)"),
+      depth: z
+        .number()
+        .optional()
+        .describe("How many levels of transitive dependents to follow (1 = direct only, default: 2, max: 10)"),
+    },
+    (args) => handleAnalyzeChangeImpact(graph, args)
   );
 
   // Perform initial indexing

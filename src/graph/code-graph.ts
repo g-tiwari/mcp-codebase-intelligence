@@ -36,6 +36,10 @@ export interface ImportInfo {
 export class CodeGraph {
   constructor(private db: Database.Database) {}
 
+  getDb(): Database.Database {
+    return this.db;
+  }
+
   fileHash(content: string): string {
     return createHash("sha256").update(content).digest("hex");
   }
