@@ -1,0 +1,40 @@
+{
+  "name": "mcp-codebase-intelligence",
+  "version": "0.1.0",
+  "description": "MCP server providing semantic code intelligence — symbol search, references, call graphs, and impact analysis via tree-sitter",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-codebase-intelligence": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "code-intelligence",
+    "tree-sitter",
+    "typescript",
+    "static-analysis"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "better-sqlite3": "^12.8.0",
+    "chokidar": "^5.0.0",
+    "glob": "^13.0.6",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-typescript": "^0.23.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
