@@ -5,7 +5,7 @@ import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
 
 const goParser = new Parser();
-goParser.setLanguage(Go);
+goParser.setLanguage(Go as unknown as Parser.Language);
 
 function extractGoFuncSignature(node: Parser.SyntaxNode): string | undefined {
   const name = node.childForFieldName("name")?.text ?? "";

@@ -11,10 +11,10 @@ import {
 } from "./language-plugin.js";
 
 const tsParser = new Parser();
-tsParser.setLanguage(TypeScript.typescript);
+tsParser.setLanguage(TypeScript.typescript as unknown as Parser.Language);
 
 const tsxParser = new Parser();
-tsxParser.setLanguage(TypeScript.tsx);
+tsxParser.setLanguage(TypeScript.tsx as unknown as Parser.Language);
 
 function getTsParser(filePath: string): Parser {
   return filePath.endsWith(".tsx") || filePath.endsWith(".jsx") ? tsxParser : tsParser;

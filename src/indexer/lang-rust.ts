@@ -5,7 +5,7 @@ import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
 
 const rustParser = new Parser();
-rustParser.setLanguage(Rust);
+rustParser.setLanguage(Rust as unknown as Parser.Language);
 
 function isPublic(node: Parser.SyntaxNode): boolean {
   for (let i = 0; i < node.childCount; i++) {

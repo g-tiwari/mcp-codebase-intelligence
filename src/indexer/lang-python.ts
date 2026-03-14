@@ -5,7 +5,7 @@ import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
 
 const pyParser = new Parser();
-pyParser.setLanguage(Python);
+pyParser.setLanguage(Python as unknown as Parser.Language);
 
 function extractPySignature(node: Parser.SyntaxNode): string | undefined {
   const name = node.childForFieldName("name")?.text ?? "";

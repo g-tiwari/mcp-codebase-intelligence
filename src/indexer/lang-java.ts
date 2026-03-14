@@ -5,7 +5,7 @@ import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
 
 const javaParser = new Parser();
-javaParser.setLanguage(Java);
+javaParser.setLanguage(Java as unknown as Parser.Language);
 
 function hasModifier(node: Parser.SyntaxNode, modifier: string): boolean {
   const mods = node.childForFieldName("modifiers") ?? findChild(node, "modifiers");
