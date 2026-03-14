@@ -41,6 +41,25 @@
 - `analyze_change_impact(code-graph.ts, 36-50)` — found 6 affected symbols, 1 dependent
 - Invalid PROJECT_ROOT — clean error message, immediate exit
 
+### Real-World Test Results
+
+**Express.js (CJS, 141 files)**
+- Indexed: 1971 symbols, 2094 refs, 399 imports
+- `find_symbol("createApplication")` — found correctly
+- `get_exports` — FAILS on CJS (`module.exports =` not tracked as export)
+- `get_references("createApplication")` — empty (CJS assignment not tracked as reference)
+
+**Zod (TypeScript monorepo, 386 files)**
+- Indexed: 6253 symbols, 8961 refs, 1434 imports
+- `find_symbol("parse")` — found 10 matches across packages, correctly shows exports
+- `find_symbol("Zod")` — found component functions, variables, types
+- `get_references("parse")` — empty (called as `schema.parse()`, stored as member expression)
+
+**Known Limitations**
+- CJS `module.exports` and `exports.foo` not tracked as exports
+- Member-expression references: `obj.method()` is stored as `obj.method`, not `method` alone — searching for just the method name won't find these
+- `get_references` works for plain function calls but misses method calls on objects
+
 ### What's Next (Phase 2)
 
 - [ ] Test against a large real-world project (e.g., Express, Next.js)
