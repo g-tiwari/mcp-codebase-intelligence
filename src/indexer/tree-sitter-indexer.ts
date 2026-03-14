@@ -251,6 +251,27 @@ function walkNode(
 
     case "call_expression": {
       const func = node.childForFieldName("function");
+
+      // Check for require('./foo') calls
+      if (func?.text === "require") {
+        const args = node.childForFieldName("arguments");
+        if (args && args.namedChildCount > 0) {
+          const firstArg = args.namedChild(0);
+          if (firstArg && (firstArg.type === "string" || firstArg.type === "template_string")) {
+            const sourcePath = firstArg.text.replace(/['"]/g, "").replace(/`/g, "");
+            imports.push({
+              sourcePath,
+              importedName: "*",
+              localName: "*",
+              isDefault: false,
+              isNamespace: true,
+              line: node.startPosition.row + 1,
+            });
+          }
+        }
+      }
+
+      // Handle regular function calls
       if (func && parentIndex !== undefined) {
         const name =
           func.type === "member_expression"
@@ -267,6 +288,23 @@ function walkNode(
             col: node.startPosition.column,
           });
         }
+      }
+      break;
+    }
+
+    case "import_call_expression": {
+      // Handle dynamic imports: import('./foo')
+      const source = node.childForFieldName("source");
+      if (source) {
+        const sourcePath = source.text.replace(/['"]/g, "").replace(/`/g, "");
+        imports.push({
+          sourcePath,
+          importedName: "*",
+          localName: "*",
+          isDefault: false,
+          isNamespace: true,
+          line: node.startPosition.row + 1,
+        });
       }
       break;
     }
@@ -343,7 +381,105 @@ function walkNode(
     }
 
     case "export_statement": {
-      // Walk the declaration inside the export
+      // Check for re-exports: export { foo } from './bar' or export * from './bar'
+      const source = node.childForFieldName("source");
+      if (source) {
+        const sourcePath = source.text.replace(/['"]/g, "");
+
+        // Handle export * from './bar'
+        const exportClause = findChild(node, "export_clause");
+        if (!exportClause) {
+          // export * from './bar' - namespace re-export
+          const isExportAll = node.text.startsWith("export *");
+          if (isExportAll) {
+            imports.push({
+              sourcePath,
+              importedName: "*",
+              localName: "*",
+              isDefault: false,
+              isNamespace: true,
+              line: node.startPosition.row + 1,
+            });
+          }
+        } else {
+          // export { foo, bar as baz } from './bar'
+          for (let k = 0; k < exportClause.namedChildCount; k++) {
+            const specifier = exportClause.namedChild(k);
+            if (specifier?.type === "export_specifier") {
+              const nameNode = specifier.childForFieldName("name");
+              const aliasNode = specifier.childForFieldName("alias");
+              const importedName = nameNode?.text ?? specifier.text;
+              const exportedName = aliasNode?.text ?? importedName;
+
+              // Track as import (what we're importing from source)
+              imports.push({
+                sourcePath,
+                importedName,
+                localName: importedName,
+                isDefault: importedName === "default",
+                isNamespace: false,
+                line: node.startPosition.row + 1,
+              });
+
+              // Track as exported symbol (what we're exporting to consumers)
+              symbols.push({
+                name: exportedName,
+                kind: "variable",
+                filePath,
+                lineStart: node.startPosition.row + 1,
+                lineEnd: node.endPosition.row + 1,
+                colStart: node.startPosition.column,
+                colEnd: node.endPosition.column,
+                parentSymbolId: parentIndex,
+                isExported: true,
+              });
+            }
+          }
+        }
+        return; // Don't walk children, we've handled everything
+      }
+
+      // Check for default exports: export default function/class/expression
+      const declarationChild = node.namedChild(0);
+      if (declarationChild) {
+        const isDefaultExport = node.text.startsWith("export default");
+
+        if (isDefaultExport) {
+          // Handle: export default function foo() {} or export default class Bar {}
+          if (declarationChild.type === "function_declaration" ||
+              declarationChild.type === "class_declaration") {
+            const nameNode = declarationChild.childForFieldName("name");
+            if (nameNode) {
+              // Named default export - process the declaration and mark it as exported default
+              walkNode(declarationChild, filePath, symbols, references, imports, parentIndex);
+              // The symbol was already added, mark it as default export
+              if (symbols.length > 0) {
+                const lastSymbol = symbols[symbols.length - 1];
+                if (lastSymbol.name === nameNode.text) {
+                  lastSymbol.isExported = true;
+                }
+              }
+              return;
+            }
+          }
+
+          // Handle: export default <expression> - anonymous default export
+          symbols.push({
+            name: "default",
+            kind: "variable",
+            filePath,
+            lineStart: node.startPosition.row + 1,
+            lineEnd: node.endPosition.row + 1,
+            colStart: node.startPosition.column,
+            colEnd: node.endPosition.column,
+            parentSymbolId: parentIndex,
+            isExported: true,
+          });
+          return;
+        }
+      }
+
+      // Walk the declaration inside the export (for regular export statements)
       for (let i = 0; i < node.namedChildCount; i++) {
         const child = node.namedChild(i);
         if (child) {

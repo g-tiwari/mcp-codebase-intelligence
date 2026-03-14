@@ -18,6 +18,17 @@ const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
 const DB_PATH = process.env.DB_PATH || path.join(PROJECT_ROOT, ".codegraph", "index.db");
 
 async function main() {
+  // Validate PROJECT_ROOT exists and is a directory
+  const { existsSync, statSync } = await import("fs");
+  if (!existsSync(PROJECT_ROOT)) {
+    logger.error(`PROJECT_ROOT does not exist: ${PROJECT_ROOT}`);
+    process.exit(1);
+  }
+  if (!statSync(PROJECT_ROOT).isDirectory()) {
+    logger.error(`PROJECT_ROOT is not a directory: ${PROJECT_ROOT}`);
+    process.exit(1);
+  }
+
   logger.info(`Starting mcp-codebase-intelligence for ${PROJECT_ROOT}`);
 
   // Ensure DB directory exists
