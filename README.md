@@ -2,7 +2,7 @@
 
 **Give your AI assistant a deep understanding of your codebase.**
 
-[![CI](https://github.com/YOUR_USERNAME/mcp-codebase-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/mcp-codebase-intelligence/actions)
+[![CI](https://github.com/g-tiwari/mcp-codebase-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/g-tiwari/mcp-codebase-intelligence/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 An MCP server that parses your entire codebase with tree-sitter, builds a semantic graph of symbols, references, and dependencies, and lets AI assistants query it in real time. Works with Claude Code, Cursor, VS Code, and any MCP-compatible client.
@@ -28,7 +28,7 @@ AI coding assistants are limited by what fits in their context window. When they
 
 ```bash
 # Clone and build
-git clone https://github.com/YOUR_USERNAME/mcp-codebase-intelligence.git
+git clone https://github.com/g-tiwari/mcp-codebase-intelligence.git
 cd mcp-codebase-intelligence
 npm install && npm run build
 
