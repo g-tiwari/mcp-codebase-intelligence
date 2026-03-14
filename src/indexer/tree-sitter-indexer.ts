@@ -21,6 +21,18 @@ function getParser(filePath: string): Parser {
   return filePath.endsWith(".tsx") || filePath.endsWith(".jsx") ? tsxParser : tsParser;
 }
 
+/**
+ * Extract the bare (rightmost) name from an expression.
+ * "schema.parse" -> "parse"
+ * "this.handler" -> "handler"
+ * "a.b.c.method" -> "method"
+ * "foo" -> "foo"
+ */
+function bareName(fullName: string): string {
+  const lastDot = fullName.lastIndexOf(".");
+  return lastDot === -1 ? fullName : fullName.substring(lastDot + 1);
+}
+
 function hasExportModifier(node: Parser.SyntaxNode): boolean {
   // Check if the node or its parent has an export keyword
   if (node.parent?.type === "export_statement") return true;
@@ -112,6 +124,7 @@ function walkNode(
             references.push({
               fromSymbolId: idx,
               toSymbolName: superName,
+              toSymbolBareName: bareName(superName),
               kind: "extends",
               line: heritage.startPosition.row + 1,
               col: heritage.startPosition.column,
@@ -283,6 +296,7 @@ function walkNode(
           references.push({
             fromSymbolId: parentIndex,
             toSymbolName: name,
+            toSymbolBareName: bareName(name),
             kind: "call",
             line: node.startPosition.row + 1,
             col: node.startPosition.column,
@@ -315,6 +329,7 @@ function walkNode(
         references.push({
           fromSymbolId: parentIndex,
           toSymbolName: constructor.text,
+          toSymbolBareName: bareName(constructor.text),
           kind: "instantiation",
           line: node.startPosition.row + 1,
           col: node.startPosition.column,
@@ -487,6 +502,91 @@ function walkNode(
         }
       }
       return;
+    }
+
+    case "expression_statement": {
+      // Handle CJS exports: module.exports = ..., exports.foo = ...
+      const expr = node.namedChild(0);
+      if (expr?.type === "assignment_expression") {
+        const left = expr.childForFieldName("left");
+        const right = expr.childForFieldName("right");
+        if (left && right) {
+          const leftText = left.text;
+
+          if (leftText === "module.exports") {
+            // module.exports = foo  OR  module.exports = { ... }
+            if (right.type === "identifier") {
+              // module.exports = someFunction — mark that symbol as exported
+              // Also create a reference so we track the connection
+              symbols.push({
+                name: right.text,
+                kind: "variable",
+                filePath,
+                lineStart: node.startPosition.row + 1,
+                lineEnd: node.endPosition.row + 1,
+                colStart: node.startPosition.column,
+                colEnd: node.endPosition.column,
+                parentSymbolId: parentIndex,
+                isExported: true,
+              });
+            } else if (right.type === "object") {
+              // module.exports = { foo, bar: baz }
+              for (let i = 0; i < right.namedChildCount; i++) {
+                const prop = right.namedChild(i);
+                if (prop?.type === "shorthand_property_identifier") {
+                  symbols.push({
+                    name: prop.text,
+                    kind: "variable",
+                    filePath,
+                    lineStart: prop.startPosition.row + 1,
+                    lineEnd: prop.endPosition.row + 1,
+                    colStart: prop.startPosition.column,
+                    colEnd: prop.endPosition.column,
+                    parentSymbolId: parentIndex,
+                    isExported: true,
+                  });
+                } else if (prop?.type === "pair") {
+                  const key = prop.childForFieldName("key");
+                  if (key) {
+                    symbols.push({
+                      name: key.text,
+                      kind: "variable",
+                      filePath,
+                      lineStart: prop.startPosition.row + 1,
+                      lineEnd: prop.endPosition.row + 1,
+                      colStart: prop.startPosition.column,
+                      colEnd: prop.endPosition.column,
+                      parentSymbolId: parentIndex,
+                      isExported: true,
+                    });
+                  }
+                }
+              }
+            }
+            // Walk the right side for any nested references
+            walkNode(right, filePath, symbols, references, imports, parentIndex);
+            return;
+          } else if (leftText.startsWith("exports.") || leftText.startsWith("module.exports.")) {
+            // exports.foo = ... or module.exports.foo = ...
+            const exportName = bareName(leftText);
+            symbols.push({
+              name: exportName,
+              kind: "variable",
+              filePath,
+              lineStart: node.startPosition.row + 1,
+              lineEnd: node.endPosition.row + 1,
+              colStart: node.startPosition.column,
+              colEnd: node.endPosition.column,
+              parentSymbolId: parentIndex,
+              isExported: true,
+            });
+            // Walk the right side
+            walkNode(right, filePath, symbols, references, imports, parentIndex);
+            return;
+          }
+        }
+      }
+      break;
     }
   }
 

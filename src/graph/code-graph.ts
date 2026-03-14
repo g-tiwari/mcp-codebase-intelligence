@@ -18,6 +18,7 @@ export interface SymbolInfo {
 export interface ReferenceInfo {
   fromSymbolId: number;
   toSymbolName: string;
+  toSymbolBareName: string;
   toFileId?: number;
   kind: string;
   line: number;
@@ -101,10 +102,10 @@ export class CodeGraph {
   insertReference(ref: ReferenceInfo) {
     this.db
       .prepare(
-        `INSERT INTO references_ (from_symbol_id, to_symbol_name, to_file_id, kind, line, col)
-         VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO references_ (from_symbol_id, to_symbol_name, to_symbol_bare_name, to_file_id, kind, line, col)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(ref.fromSymbolId, ref.toSymbolName, ref.toFileId ?? null, ref.kind, ref.line, ref.col);
+      .run(ref.fromSymbolId, ref.toSymbolName, ref.toSymbolBareName, ref.toFileId ?? null, ref.kind, ref.line, ref.col);
   }
 
   insertImport(fileId: number, imp: ImportInfo) {
@@ -268,11 +269,14 @@ export class CodeGraph {
     const sql = `
       WITH RECURSIVE ref_chain(from_symbol_name, from_kind, from_file, from_line, to_name, ref_kind, ref_line, ref_col, depth) AS (
         -- Base case: direct references to the target symbol
+        -- Match against both full qualified name and bare name
         SELECT s.name, s.kind, f.path, s.line_start, r.to_symbol_name, r.kind, r.line, r.col, 1
         FROM references_ r
         JOIN symbols s ON r.from_symbol_id = s.id
         JOIN files f ON s.file_id = f.id
         WHERE r.to_symbol_name = ?
+           OR r.to_symbol_bare_name = ?
+           OR r.to_symbol_name LIKE (? || '.%')
 
         UNION ALL
 
@@ -282,6 +286,8 @@ export class CodeGraph {
         JOIN symbols s ON r.from_symbol_id = s.id
         JOIN files f ON s.file_id = f.id
         JOIN ref_chain rc ON r.to_symbol_name = rc.from_symbol_name
+                          OR r.to_symbol_bare_name = rc.from_symbol_name
+                          OR r.to_symbol_name LIKE (rc.from_symbol_name || '.%')
         WHERE rc.depth < ?
       )
       SELECT from_symbol_name as fromSymbol, from_kind as fromKind, from_file as fromFile,
@@ -292,7 +298,7 @@ export class CodeGraph {
       LIMIT 200
     `;
 
-    return this.db.prepare(sql).all(symbolName, depth) as Array<{
+    return this.db.prepare(sql).all(symbolName, symbolName, symbolName, depth) as Array<{
       fromSymbol: string;
       fromKind: string;
       fromFile: string;

@@ -33,6 +33,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       from_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,
       to_symbol_name TEXT NOT NULL,
+      to_symbol_bare_name TEXT NOT NULL,
       to_file_id INTEGER,
       kind TEXT NOT NULL,
       line INTEGER NOT NULL,
@@ -55,6 +56,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);
     CREATE INDEX IF NOT EXISTS idx_refs_from ON references_(from_symbol_id);
     CREATE INDEX IF NOT EXISTS idx_refs_to_name ON references_(to_symbol_name);
+    CREATE INDEX IF NOT EXISTS idx_refs_to_bare ON references_(to_symbol_bare_name);
     CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
     CREATE INDEX IF NOT EXISTS idx_imports_source ON imports(source_path);
   `);
