@@ -20,6 +20,7 @@ import { getCallGraphTool, handleGetCallGraph } from "./tools/get-call-graph.js"
 import { gotoDefinitionTool, handleGotoDefinition } from "./tools/goto-definition.js";
 import { getTypeInfoTool, handleGetTypeInfo } from "./tools/get-type-info.js";
 import { findImplementationsTool, handleFindImplementations } from "./tools/find-implementations.js";
+import { semanticDiffTool, handleSemanticDiff } from "./tools/semantic-diff.js";
 import { LspManager } from "./lsp/lsp-manager.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
@@ -188,6 +189,16 @@ async function main() {
       character: z.number().describe("Column number (0-based)"),
     },
     (args) => handleFindImplementations(lspManager, args)
+  );
+
+  server.tool(
+    semanticDiffTool.name,
+    semanticDiffTool.description,
+    {
+      diff: z.string().describe("Unified diff text (output of `git diff`)"),
+      depth: z.number().optional().describe("Transitive dependency depth (default: 2, max: 5)"),
+    },
+    (args) => handleSemanticDiff(graph, args)
   );
 
   // Perform initial indexing (tree-sitter — fast)
