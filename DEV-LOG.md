@@ -37,10 +37,36 @@
 - `get_exports("gin.go")` — 34 exports with Go signatures including receiver types
 - `get_call_graph("New")` — callers: dozens of tests; callees: Engine, RouterGroup, Context instantiations (mermaid diagram)
 
-### What's Next (Phase 3)
+## Phase 3 (LSP Integration) — Status: COMPLETE
+
+### What's Done
+
+- [x] LSP JSON-RPC client (`lsp-client.ts`) — Content-Length framing, request/response matching, 30s timeout
+- [x] LSP manager (`lsp-manager.ts`) — auto-detects project type, npx fallback if binary not in PATH
+- [x] Non-blocking startup — LSP starts in background after tree-sitter indexing
+- [x] 3 new MCP tools:
+  - `goto_definition` — resolves definition at file:line:character, shows surrounding code context
+  - `get_type_info` — hover info + type definition location
+  - `find_implementations` — find all implementations of interface/abstract method
+- [x] Bug fix: `require("child_process")` in ESM module — replaced with proper `import { execFile }`
+
+### Git History
+
+- `b406ca5` — Phase 2: Python, Go, get_call_graph, plugin architecture
+- *(LSP integration committed next)*
+
+### Test Results
+
+**LSP Startup (self-index)**
+- typescript-language-server detected via npx fallback
+- LSP initialized in ~300ms after tree-sitter indexing
+- `goto_definition` on `CodeGraph` — resolves to import declaration
+- `get_type_info` (hover) — returns `import CodeGraph` type info
+- Clean shutdown with graceful LSP stop
+
+### What's Next (Phase 4)
 
 - [ ] Performance optimization for large repos (>10k files)
-- [ ] LSP integration for type-level semantics
 - [ ] Rust support via tree-sitter-rust
 - [ ] Java support via tree-sitter-java
 
@@ -152,13 +178,19 @@ PROJECT_ROOT=/path/to/your/project node dist/index.js
 
 ```
 src/
-  index.ts                    — MCP server entry point (7 tools registered)
+  index.ts                    — MCP server entry point (11 tools registered)
   graph/
     schema.ts                 — SQLite schema (files, symbols, references_, imports)
     code-graph.ts             — Graph storage + query engine
   indexer/
-    tree-sitter-indexer.ts    — AST parser (TS/TSX/JS/JSX) with edge case handling
+    language-plugin.ts        — Plugin interface + registry
+    tree-sitter-indexer.ts    — TS/JS plugin (auto-registers on import)
+    lang-python.ts            — Python plugin
+    lang-go.ts                — Go plugin
     file-watcher.ts           — File discovery + incremental watching
+  lsp/
+    lsp-client.ts             — LSP JSON-RPC client over stdio
+    lsp-manager.ts            — Auto-detect, lifecycle, npx fallback
   tools/
     find-symbol.ts            — find_symbol tool
     get-references.ts         — get_references tool
@@ -167,6 +199,10 @@ src/
     get-stats.ts              — get_index_stats tool
     reindex.ts                — reindex tool
     analyze-impact.ts         — analyze_change_impact tool
+    get-call-graph.ts         — get_call_graph tool (tree/mermaid)
+    goto-definition.ts        — goto_definition tool (LSP)
+    get-type-info.ts          — get_type_info tool (LSP)
+    find-implementations.ts   — find_implementations tool (LSP)
   utils/
     logger.ts                 — stderr JSON logger
 ```

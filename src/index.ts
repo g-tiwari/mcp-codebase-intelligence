@@ -15,6 +15,10 @@ import { getStatsTool, handleGetStats } from "./tools/get-stats.js";
 import { reindexTool, handleReindex } from "./tools/reindex.js";
 import { analyzeChangeImpactTool, handleAnalyzeChangeImpact } from "./tools/analyze-impact.js";
 import { getCallGraphTool, handleGetCallGraph } from "./tools/get-call-graph.js";
+import { gotoDefinitionTool, handleGotoDefinition } from "./tools/goto-definition.js";
+import { getTypeInfoTool, handleGetTypeInfo } from "./tools/get-type-info.js";
+import { findImplementationsTool, handleFindImplementations } from "./tools/find-implementations.js";
+import { LspManager } from "./lsp/lsp-manager.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 
@@ -148,9 +152,57 @@ async function main() {
     (args) => handleGetCallGraph(graph, args)
   );
 
-  // Perform initial indexing
+  // Register LSP-powered tools
+  const lspManager = new LspManager(PROJECT_ROOT);
+
+  server.tool(
+    gotoDefinitionTool.name,
+    gotoDefinitionTool.description,
+    {
+      file_path: z.string().describe("Absolute path to the file"),
+      line: z.number().describe("Line number (1-based)"),
+      character: z.number().describe("Column number (0-based)"),
+    },
+    (args) => handleGotoDefinition(lspManager, args)
+  );
+
+  server.tool(
+    getTypeInfoTool.name,
+    getTypeInfoTool.description,
+    {
+      file_path: z.string().describe("Absolute path to the file"),
+      line: z.number().describe("Line number (1-based)"),
+      character: z.number().describe("Column number (0-based)"),
+    },
+    (args) => handleGetTypeInfo(lspManager, args)
+  );
+
+  server.tool(
+    findImplementationsTool.name,
+    findImplementationsTool.description,
+    {
+      file_path: z.string().describe("Absolute path to the file containing the interface/abstract method"),
+      line: z.number().describe("Line number (1-based)"),
+      character: z.number().describe("Column number (0-based)"),
+    },
+    (args) => handleFindImplementations(lspManager, args)
+  );
+
+  // Perform initial indexing (tree-sitter — fast)
   await watcher.initialIndex();
   watcher.startWatching();
+
+  // Start LSP servers in background (slow — don't block MCP)
+  lspManager.start().then(() => {
+    const servers = lspManager.getActiveServers();
+    if (servers.length > 0) {
+      logger.info(`LSP servers active: ${servers.join(", ")}`);
+    } else {
+      logger.info("No LSP servers started (tools still work via tree-sitter)");
+    }
+  }).catch((err) => {
+    logger.warn("LSP startup failed (non-fatal)", err);
+  });
 
   // Start MCP server on stdio
   const transport = new StdioServerTransport();
@@ -159,19 +211,16 @@ async function main() {
   logger.info("MCP server running on stdio");
 
   // Graceful shutdown
-  process.on("SIGINT", async () => {
+  const shutdown = async () => {
     logger.info("Shutting down...");
     await watcher.stop();
+    await lspManager.stop();
     db.close();
     process.exit(0);
-  });
+  };
 
-  process.on("SIGTERM", async () => {
-    logger.info("Shutting down...");
-    await watcher.stop();
-    db.close();
-    process.exit(0);
-  });
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 main().catch((err) => {
