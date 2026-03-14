@@ -2,14 +2,15 @@ import { watch, type FSWatcher } from "chokidar";
 import { glob } from "glob";
 import path from "path";
 import { parseFile } from "./tree-sitter-indexer.js";
+import { getAllExtensions } from "./language-plugin.js";
 import { CodeGraph } from "../graph/code-graph.js";
 import { logger } from "../utils/logger.js";
 
-const TS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"];
-const IGNORE_PATTERNS = ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.git/**", "**/coverage/**"];
+const IGNORE_PATTERNS = ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.git/**", "**/coverage/**", "**/__pycache__/**", "**/venv/**", "**/.venv/**"];
 
 function isTargetFile(filePath: string): boolean {
-  return TS_EXTENSIONS.some((ext) => filePath.endsWith(ext));
+  const extensions = getAllExtensions();
+  return extensions.some((ext) => filePath.endsWith(ext));
 }
 
 export class FileWatcher {
@@ -29,7 +30,8 @@ export class FileWatcher {
     const startTime = Date.now();
 
     try {
-      const patterns = TS_EXTENSIONS.map((ext) => `**/*${ext}`);
+      const extensions = getAllExtensions();
+      const patterns = extensions.map((ext) => `**/*${ext}`);
       const files: string[] = [];
 
       for (const pattern of patterns) {
@@ -61,7 +63,8 @@ export class FileWatcher {
   }
 
   startWatching(): void {
-    const watchPatterns = TS_EXTENSIONS.map((ext) => path.join(this.rootPath, "**", `*${ext}`));
+    const extensions = getAllExtensions();
+    const watchPatterns = extensions.map((ext) => path.join(this.rootPath, "**", `*${ext}`));
 
     this.watcher = watch(watchPatterns, {
       ignored: IGNORE_PATTERNS,

@@ -4,6 +4,9 @@ import path from "path";
 import { initializeDatabase } from "./graph/schema.js";
 import { CodeGraph } from "./graph/code-graph.js";
 import { FileWatcher } from "./indexer/file-watcher.js";
+// Language plugins — imported for side-effect (registration)
+import "./indexer/lang-python.js";
+import "./indexer/lang-go.js";
 import { findSymbolTool, handleFindSymbol } from "./tools/find-symbol.js";
 import { getReferencesTool, handleGetReferences } from "./tools/get-references.js";
 import { getExportsTool, handleGetExports } from "./tools/get-exports.js";
@@ -11,6 +14,7 @@ import { getDependenciesTool, handleGetDependencies } from "./tools/get-dependen
 import { getStatsTool, handleGetStats } from "./tools/get-stats.js";
 import { reindexTool, handleReindex } from "./tools/reindex.js";
 import { analyzeChangeImpactTool, handleAnalyzeChangeImpact } from "./tools/analyze-impact.js";
+import { getCallGraphTool, handleGetCallGraph } from "./tools/get-call-graph.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 
@@ -124,6 +128,24 @@ async function main() {
         .describe("How many levels of transitive dependents to follow (1 = direct only, default: 2, max: 10)"),
     },
     (args) => handleAnalyzeChangeImpact(graph, args)
+  );
+
+  server.tool(
+    getCallGraphTool.name,
+    getCallGraphTool.description,
+    {
+      function_name: z.string().describe("Name of the function to get the call graph for"),
+      direction: z
+        .enum(["callers", "callees", "both"])
+        .optional()
+        .describe("Direction of the graph (default: both)"),
+      depth: z.number().optional().describe("How many levels to traverse (default: 2, max: 5)"),
+      format: z
+        .enum(["tree", "mermaid"])
+        .optional()
+        .describe("Output format (default: tree)"),
+    },
+    (args) => handleGetCallGraph(graph, args)
   );
 
   // Perform initial indexing

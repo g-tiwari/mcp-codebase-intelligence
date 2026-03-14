@@ -3,6 +3,12 @@ import TypeScript from "tree-sitter-typescript";
 import { readFileSync } from "fs";
 import { SymbolInfo, ReferenceInfo, ImportInfo } from "../graph/code-graph.js";
 import { logger } from "../utils/logger.js";
+import {
+  type LanguagePlugin,
+  type ParseResult,
+  registerLanguage,
+  getPluginForFile,
+} from "./language-plugin.js";
 
 const tsParser = new Parser();
 tsParser.setLanguage(TypeScript.typescript);
@@ -10,14 +16,7 @@ tsParser.setLanguage(TypeScript.typescript);
 const tsxParser = new Parser();
 tsxParser.setLanguage(TypeScript.tsx);
 
-interface ParseResult {
-  symbols: SymbolInfo[];
-  references: ReferenceInfo[];
-  imports: ImportInfo[];
-  content: string;
-}
-
-function getParser(filePath: string): Parser {
+function getTsParser(filePath: string): Parser {
   return filePath.endsWith(".tsx") || filePath.endsWith(".jsx") ? tsxParser : tsParser;
 }
 
@@ -28,7 +27,7 @@ function getParser(filePath: string): Parser {
  * "a.b.c.method" -> "method"
  * "foo" -> "foo"
  */
-function bareName(fullName: string): string {
+export function bareName(fullName: string): string {
   const lastDot = fullName.lastIndexOf(".");
   return lastDot === -1 ? fullName : fullName.substring(lastDot + 1);
 }
@@ -618,17 +617,37 @@ function findChild(node: Parser.SyntaxNode, type: string): Parser.SyntaxNode | n
   return null;
 }
 
+// --- TypeScript/JavaScript Language Plugin ---
+
+export const typescriptPlugin: LanguagePlugin = {
+  id: "typescript",
+  extensions: [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"],
+  getParser: getTsParser,
+  walk: walkNode,
+};
+
+// Register on import
+registerLanguage(typescriptPlugin);
+
+// --- Generic parse functions (dispatch to plugins) ---
+
 export function parseFile(filePath: string): ParseResult | null {
   try {
+    const plugin = getPluginForFile(filePath);
+    if (!plugin) {
+      logger.debug(`No language plugin for: ${filePath}`);
+      return null;
+    }
+
     const content = readFileSync(filePath, "utf-8");
-    const parser = getParser(filePath);
+    const parser = plugin.getParser(filePath);
     const tree = parser.parse(content);
 
     const symbols: SymbolInfo[] = [];
     const references: ReferenceInfo[] = [];
     const imports: ImportInfo[] = [];
 
-    walkNode(tree.rootNode, filePath, symbols, references, imports);
+    plugin.walk(tree.rootNode, filePath, symbols, references, imports);
 
     logger.debug(`Parsed ${filePath}: ${symbols.length} symbols, ${references.length} refs, ${imports.length} imports`);
 
@@ -640,14 +659,19 @@ export function parseFile(filePath: string): ParseResult | null {
 }
 
 export function parseSource(source: string, filePath: string): ParseResult {
-  const parser = getParser(filePath);
+  const plugin = getPluginForFile(filePath);
+  if (!plugin) {
+    return { symbols: [], references: [], imports: [], content: source };
+  }
+
+  const parser = plugin.getParser(filePath);
   const tree = parser.parse(source);
 
   const symbols: SymbolInfo[] = [];
   const references: ReferenceInfo[] = [];
   const imports: ImportInfo[] = [];
 
-  walkNode(tree.rootNode, filePath, symbols, references, imports);
+  plugin.walk(tree.rootNode, filePath, symbols, references, imports);
 
   return { symbols, references, imports, content: source };
 }
