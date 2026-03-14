@@ -1,11 +1,12 @@
 # Development Log: mcp-codebase-intelligence
 
-## Phase 1 — Status: NEARLY COMPLETE
+## Phase 1 — Status: COMPLETE
 
 ### Git History
 
-- `bb6d055` — initial MCP server with 6 tools (find_symbol, get_references, get_exports, get_dependencies, get_index_stats, reindex)
-- `(pending)` — add analyze_change_impact tool + README
+- `bb6d055` — initial MCP server with 6 tools
+- `ae49be3` — add analyze_change_impact tool + README
+- `d9ef0ed` — handle re-exports, barrel files, dynamic imports, require calls + PROJECT_ROOT validation
 
 ### What's Done
 
@@ -16,8 +17,10 @@
   - Extracts: functions, classes, interfaces, types, enums, methods, properties, variables
   - Tracks: call references, extends/implements, imports, new expressions
   - Handles: export detection, arrow functions, member expressions, nested scopes
+  - Edge cases: re-exports, barrel files (`export { default as X }`), `export *`, dynamic imports, require()
 - [x] File watcher (chokidar) — initial index + incremental updates
 - [x] MCP server with stdio transport
+- [x] PROJECT_ROOT validation with clear error messages
 - [x] 7 MCP tools registered and working:
   - `find_symbol` — fuzzy name search with kind/scope filters
   - `get_references` — transitive reference chain via recursive CTE
@@ -28,25 +31,19 @@
   - `analyze_change_impact` — lines -> affected symbols -> dependents
 - [x] README with Claude Code + Cursor config examples
 
-### Smoke Test Results (self-indexing)
+### Smoke Test Results (self-indexing, post-edge-case fixes)
 
-- Indexed 12+ source files in 0.05s
-- Found 200+ symbols, 283+ references, 44+ imports
+- Indexed 13 source files in 0.05s
+- Found 245 symbols, 354 references, 47 imports
 - `find_symbol("CodeGraph")` — correctly found class with signature
 - `get_references("logger.info")` — found 11 call sites across 4 files
 - `get_references("parseFile")` — found 2 callers in file-watcher.ts
-- `analyze_change_impact(code-graph.ts, 36-50)` — found 6 affected symbols, 1 dependent (CodeGraph instantiation in index.ts)
-- MCP initialize handshake working
-- tools/list returns all 7 tools with schemas
-
-### What's Left for Phase 1
-
-- [ ] Test against a real external project (not just self-indexing)
-- [ ] Handle edge cases: re-exports, barrel files, dynamic imports
-- [ ] Better error messages when project root doesn't exist
+- `analyze_change_impact(code-graph.ts, 36-50)` — found 6 affected symbols, 1 dependent
+- Invalid PROJECT_ROOT — clean error message, immediate exit
 
 ### What's Next (Phase 2)
 
+- [ ] Test against a large real-world project (e.g., Express, Next.js)
 - [ ] LSP integration for richer semantic data (tsserver)
 - [ ] Python support via pyright/pylsp
 - [ ] Go support via gopls
@@ -99,7 +96,7 @@ src/
     schema.ts                 — SQLite schema (files, symbols, references_, imports)
     code-graph.ts             — Graph storage + query engine
   indexer/
-    tree-sitter-indexer.ts    — AST parser (TS/TSX/JS/JSX)
+    tree-sitter-indexer.ts    — AST parser (TS/TSX/JS/JSX) with edge case handling
     file-watcher.ts           — File discovery + incremental watching
   tools/
     find-symbol.ts            — find_symbol tool
