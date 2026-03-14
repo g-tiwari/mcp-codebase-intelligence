@@ -17,6 +17,7 @@ Provides deep code understanding for TypeScript and JavaScript codebases through
 | `get_index_stats` | Get statistics about the indexed codebase — number of files, symbols, references, and imports. |
 | `reindex` | Trigger a full re-index of the codebase. Useful after major changes or when results seem stale. |
 | `analyze_change_impact` | Analyze what code is affected if specific lines are changed — returns affected symbols and their dependents. |
+| `get_call_graph` | Get the call graph for a function — callers and callees with tree or mermaid diagram output. |
 
 ## Quick Start
 
@@ -81,10 +82,10 @@ Add to your MCP settings file (`.cursor/mcp.json` or `.vscode/mcp.json`):
 
 ## Supported Languages
 
-- TypeScript (`.ts`)
-- TSX (`.tsx`)
-- JavaScript (`.js`)
-- JSX (`.jsx`)
+- TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`)
+- JavaScript (`.js`, `.jsx`, `.mjs`, `.cjs`)
+- Python (`.py`, `.pyi`)
+- Go (`.go`)
 
 ## How It Works
 

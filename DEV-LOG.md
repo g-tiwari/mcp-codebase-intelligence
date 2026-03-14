@@ -10,8 +10,43 @@
 - `52277dd` — Phase 1 complete dev log
 - `2e54065` — real-world test results (Express, Zod) and known limitations
 - `524f4eb` — 3-level reference matching + CJS exports (major fix)
+- `5275381` — updated test results
+- `b406ca5` — Phase 2: Python, Go, get_call_graph, plugin architecture
+
+## Phase 2 — Status: COMPLETE
 
 ### What's Done
+
+- [x] Plugin architecture (`LanguagePlugin` interface with auto-registration)
+- [x] Python support (functions, classes, methods, imports, decorators, inheritance)
+- [x] Go support (functions, methods with receivers, structs, interfaces, imports, capitalized exports)
+- [x] `get_call_graph` tool (callers + callees, tree/mermaid output)
+- [x] File watcher dynamically picks up extensions from all registered plugins
+
+### Test Results
+
+**Python — requests library (33 files)**
+- 471 symbols, 1005 references, 315 imports
+- `find_symbol("Session")` — found with inheritance chain
+- `get_exports("api.py")` — 8 exports with full Python signatures
+- `get_references("get")` — 36 results
+
+**Go — gin web framework (94 files)**
+- 1219 symbols, 5600 references, 436 imports
+- `find_symbol("Engine")` — found struct type
+- `get_exports("gin.go")` — 34 exports with Go signatures including receiver types
+- `get_call_graph("New")` — callers: dozens of tests; callees: Engine, RouterGroup, Context instantiations (mermaid diagram)
+
+### What's Next (Phase 3)
+
+- [ ] Performance optimization for large repos (>10k files)
+- [ ] LSP integration for type-level semantics
+- [ ] Rust support via tree-sitter-rust
+- [ ] Java support via tree-sitter-java
+
+---
+
+### What's Done (Phase 1)
 
 - [x] Project scaffolding (TypeScript, npm, tsconfig)
 - [x] SQLite schema with tables: files, symbols, references_, imports
