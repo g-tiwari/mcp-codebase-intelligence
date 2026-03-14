@@ -61,10 +61,11 @@ function walkJava(
         const idx = symbols.length;
         symbols.push(sym);
 
-        // Track superclass
+        // Track superclass — superclass node wraps a type_identifier
         const superclass = node.childForFieldName("superclass");
         if (superclass) {
-          const superName = superclass.text;
+          const superType = superclass.namedChild(0);
+          const superName = superType?.text ?? superclass.text;
           references.push({
             fromSymbolId: idx,
             toSymbolName: superName,
@@ -75,11 +76,13 @@ function walkJava(
           });
         }
 
-        // Track interfaces
+        // Track interfaces — super_interfaces > type_list > type_identifier*
         const interfaces = node.childForFieldName("interfaces");
         if (interfaces) {
-          for (let i = 0; i < interfaces.namedChildCount; i++) {
-            const iface = interfaces.namedChild(i);
+          const typeList = interfaces.namedChild(0); // type_list node
+          const source = typeList ?? interfaces;
+          for (let i = 0; i < source.namedChildCount; i++) {
+            const iface = source.namedChild(i);
             if (iface) {
               references.push({
                 fromSymbolId: idx,
@@ -273,9 +276,10 @@ function walkJava(
       return;
     }
 
-    case "annotation": {
-      // @Override, @Deprecated, etc.
-      const nameNode = node.childForFieldName("name");
+    case "annotation":
+    case "marker_annotation": {
+      // @Override, @Deprecated, @RequestMapping(...), etc.
+      const nameNode = node.childForFieldName("name") ?? node.namedChild(0);
       if (nameNode && parentIndex !== undefined) {
         references.push({
           fromSymbolId: parentIndex,

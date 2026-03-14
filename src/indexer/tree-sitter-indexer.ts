@@ -114,19 +114,20 @@ function walkNode(
         symbols.push(sym);
 
         // Extract superclass reference
-        const heritage = node.childForFieldName("superclass") ?? findChild(node, "extends_clause");
-        if (heritage) {
-          const superName = heritage.type === "extends_clause"
-            ? heritage.child(1)?.text
-            : heritage.text;
+        // tree-sitter-typescript: class_heritage > extends_clause > identifier
+        const classHeritage = findChild(node, "class_heritage");
+        const extendsClause = classHeritage ? findChild(classHeritage, "extends_clause") : null;
+        if (extendsClause) {
+          // The superclass name is the second child (first is "extends" keyword)
+          const superName = extendsClause.child(1)?.text;
           if (superName) {
             references.push({
               fromSymbolId: idx,
               toSymbolName: superName,
               toSymbolBareName: bareName(superName),
               kind: "extends",
-              line: heritage.startPosition.row + 1,
-              col: heritage.startPosition.column,
+              line: extendsClause.startPosition.row + 1,
+              col: extendsClause.startPosition.column,
             });
           }
         }
