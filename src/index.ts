@@ -21,6 +21,8 @@ import { gotoDefinitionTool, handleGotoDefinition } from "./tools/goto-definitio
 import { getTypeInfoTool, handleGetTypeInfo } from "./tools/get-type-info.js";
 import { findImplementationsTool, handleFindImplementations } from "./tools/find-implementations.js";
 import { semanticDiffTool, handleSemanticDiff } from "./tools/semantic-diff.js";
+import { architectureDiagramTool, handleArchitectureDiagram } from "./tools/architecture-diagram.js";
+import { naturalLanguageQueryTool, handleNaturalLanguageQuery } from "./tools/natural-language-query.js";
 import { LspManager } from "./lsp/lsp-manager.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
@@ -55,6 +57,7 @@ async function main() {
   const server = new McpServer({
     name: "codebase-intelligence",
     version: "0.1.0",
+    description: `Semantic code intelligence for the project at: ${PROJECT_ROOT}. All tools in this server operate on this indexed project, not the user's current working directory.`,
   });
 
   // Register tools
@@ -112,7 +115,7 @@ async function main() {
     getStatsTool.name,
     getStatsTool.description,
     {},
-    () => handleGetStats(graph)
+    () => handleGetStats(graph, PROJECT_ROOT)
   );
 
   server.tool(
@@ -195,10 +198,31 @@ async function main() {
     semanticDiffTool.name,
     semanticDiffTool.description,
     {
-      diff: z.string().describe("Unified diff text (output of `git diff`)"),
+      git_ref: z.string().optional().describe("Git ref to diff against (e.g. 'HEAD~1', 'HEAD~5', 'main', 'staged', 'unstaged'). Preferred over passing raw diff text."),
+      diff: z.string().optional().describe("Raw unified diff text. Only use if git_ref is not applicable."),
       depth: z.number().optional().describe("Transitive dependency depth (default: 2, max: 5)"),
     },
-    (args) => handleSemanticDiff(graph, args)
+    (args) => handleSemanticDiff(graph, args, PROJECT_ROOT)
+  );
+
+  server.tool(
+    architectureDiagramTool.name,
+    architectureDiagramTool.description,
+    {
+      scope: z.string().optional().describe("Optional: limit diagram to files under this path prefix"),
+      max_depth: z.number().optional().describe("Maximum directory nesting depth for subgraph grouping (default: 2)"),
+      format: z.enum(["mermaid", "text"]).optional().describe("Output format (default: mermaid)"),
+    },
+    (args) => handleArchitectureDiagram(graph, args, PROJECT_ROOT)
+  );
+
+  server.tool(
+    naturalLanguageQueryTool.name,
+    naturalLanguageQueryTool.description,
+    {
+      query: z.string().describe("Natural language question about the codebase"),
+    },
+    (args) => handleNaturalLanguageQuery(graph, args)
   );
 
   // Perform initial indexing (tree-sitter — fast)

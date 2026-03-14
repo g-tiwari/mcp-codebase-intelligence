@@ -95,7 +95,10 @@ describe("semantic_diff tool", () => {
 
     it("returns message for empty diff", () => {
       const result = handleSemanticDiff(graph, { diff: "" });
-      assert.ok(result.content[0].text.includes("No file changes"));
+      assert.ok(
+        result.content[0].text.includes("No diff provided") ||
+        result.content[0].text.includes("No file changes")
+      );
     });
   });
 

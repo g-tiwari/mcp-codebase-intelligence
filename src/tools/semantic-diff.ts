@@ -1,16 +1,22 @@
+import { execSync } from "child_process";
 import { CodeGraph } from "../graph/code-graph.js";
 
 export const semanticDiffTool = {
   name: "semantic_diff",
   description:
-    "Analyze the semantic impact of a git diff or code change. Parses a unified diff, identifies which symbols were modified/added/removed, finds all downstream dependents that could be affected, and produces a structured impact report. Feed it the output of `git diff`, `git diff --staged`, or `git diff HEAD~1`.",
+    "Analyze the semantic impact of a git diff or code change. Identifies which symbols were modified/added/removed, finds all downstream dependents, and produces a structured impact report. Preferred: use `git_ref` (e.g. 'HEAD~1', 'HEAD~5', 'main', 'staged') to let the tool run git diff directly — avoids truncation of large diffs. Alternatively pass raw diff text via `diff`.",
   inputSchema: {
     type: "object" as const,
     properties: {
+      git_ref: {
+        type: "string",
+        description:
+          "Git ref to diff against (e.g. 'HEAD~1', 'HEAD~5', 'main', 'staged', 'unstaged'). The tool runs git diff internally — use this instead of passing diff text to avoid truncation.",
+      },
       diff: {
         type: "string",
         description:
-          "Unified diff text (output of `git diff`, `git diff --staged`, or `git diff HEAD~1`)",
+          "Raw unified diff text. Only use if git_ref is not applicable (e.g. for non-git diffs).",
       },
       depth: {
         type: "number",
@@ -18,7 +24,6 @@ export const semanticDiffTool = {
           "How many levels of transitive dependents to follow (default: 2, max: 5)",
       },
     },
-    required: ["diff"],
   },
 };
 
@@ -59,10 +64,57 @@ interface SymbolImpact {
 
 export function handleSemanticDiff(
   graph: CodeGraph,
-  args: { diff: string; depth?: number }
+  args: { diff?: string; git_ref?: string; depth?: number },
+  projectRoot?: string
 ) {
   const depth = Math.min(Math.max(args.depth ?? 2, 1), 5);
-  const hunks = parseDiff(args.diff);
+
+  let diffText = args.diff ?? "";
+
+  // If git_ref is provided, run git diff directly to avoid AI truncation
+  if (args.git_ref && projectRoot) {
+    try {
+      const ref = args.git_ref.trim();
+      let cmd: string;
+      if (ref === "staged") {
+        cmd = "git diff --staged";
+      } else if (ref === "unstaged") {
+        cmd = "git diff";
+      } else {
+        // Sanitize: only allow safe git ref characters
+        const safeRef = ref.replace(/[^a-zA-Z0-9_.~\-/^]/g, "");
+        cmd = `git diff ${safeRef}`;
+      }
+      diffText = execSync(cmd, {
+        cwd: projectRoot,
+        maxBuffer: 10 * 1024 * 1024, // 10MB
+        encoding: "utf-8",
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Failed to run git diff: ${message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  if (!diffText) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: "No diff provided. Use `git_ref` (e.g. 'HEAD~1', 'staged') or pass raw diff text via `diff`.",
+        },
+      ],
+    };
+  }
+
+  const hunks = parseDiff(diffText);
 
   if (hunks.length === 0) {
     return {
