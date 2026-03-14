@@ -26,32 +26,43 @@ AI coding assistants are limited by what fits in their context window. When they
 
 ## Quick Start
 
-```bash
-# Clone and build
-git clone https://github.com/g-tiwari/mcp-codebase-intelligence.git
-cd mcp-codebase-intelligence
-npm install && npm run build
+### One-liner (no clone needed)
 
-# Add to Claude Code
+```bash
+# Add to Claude Code via npx
 claude mcp add codebase-intelligence \
-  node /path/to/mcp-codebase-intelligence/dist/index.js \
+  npx mcp-codebase-intelligence \
   -e PROJECT_ROOT=/path/to/your/project
 ```
 
-Or add manually to your MCP config (Claude Code, Cursor, VS Code):
+### JSON config (Claude Code, Cursor, VS Code)
+
+Add to your MCP config file:
 
 ```json
 {
   "mcpServers": {
     "codebase-intelligence": {
-      "command": "node",
-      "args": ["/path/to/mcp-codebase-intelligence/dist/index.js"],
+      "command": "npx",
+      "args": ["mcp-codebase-intelligence"],
       "env": {
         "PROJECT_ROOT": "/path/to/your/project"
       }
     }
   }
 }
+```
+
+### From source (for development)
+
+```bash
+git clone https://github.com/g-tiwari/mcp-codebase-intelligence.git
+cd mcp-codebase-intelligence
+npm install && npm run build
+
+claude mcp add codebase-intelligence \
+  node /path/to/mcp-codebase-intelligence/dist/index.js \
+  -e PROJECT_ROOT=/path/to/your/project
 ```
 
 That's it. The server indexes your codebase on startup and watches for changes.
@@ -147,7 +158,7 @@ Tested on real-world projects: Zod, Express, gin, ripgrep, gson.
 npm test
 ```
 
-90 tests across 7 test suites covering all 6 language parsers, the graph engine, and semantic diff.
+108 tests across 8 test suites covering all 6 language parsers, grammar regression tests, the graph engine, and semantic diff.
 
 ---
 
