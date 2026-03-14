@@ -1,28 +1,49 @@
 {
   "name": "mcp-codebase-intelligence",
   "version": "0.1.0",
-  "description": "MCP server providing semantic code intelligence — symbol search, references, call graphs, and impact analysis via tree-sitter",
+  "description": "MCP server providing semantic code intelligence — symbol search, references, call graphs, impact analysis, and architecture diagrams via tree-sitter",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "mcp-codebase-intelligence": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "node --import tsx --test tests/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "code-intelligence",
     "tree-sitter",
+    "static-analysis",
+    "semantic-diff",
+    "code-review",
     "typescript",
-    "static-analysis"
+    "python",
+    "go",
+    "rust",
+    "java"
   ],
-  "author": "",
+  "author": "Gaurav Tiwari <tiwarigaurav1992@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/g-tiwari/mcp-codebase-intelligence.git"
+  },
+  "homepage": "https://github.com/g-tiwari/mcp-codebase-intelligence",
+  "bugs": {
+    "url": "https://github.com/g-tiwari/mcp-codebase-intelligence/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.8.0",
