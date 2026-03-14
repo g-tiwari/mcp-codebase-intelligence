@@ -6,7 +6,10 @@
 
 - `bb6d055` — initial MCP server with 6 tools
 - `ae49be3` — add analyze_change_impact tool + README
-- `d9ef0ed` — handle re-exports, barrel files, dynamic imports, require calls + PROJECT_ROOT validation
+- `d9ef0ed` — re-exports, barrel files, dynamic imports, require calls + PROJECT_ROOT validation
+- `52277dd` — Phase 1 complete dev log
+- `2e54065` — real-world test results (Express, Zod) and known limitations
+- `524f4eb` — 3-level reference matching + CJS exports (major fix)
 
 ### What's Done
 
@@ -44,25 +47,29 @@
 ### Real-World Test Results
 
 **Express.js (CJS, 141 files)**
-- Indexed: 1971 symbols, 2094 refs, 399 imports
+- Indexed: 2029 symbols, 2094 refs, 399 imports
 - `find_symbol("createApplication")` — found correctly
-- `get_exports` — FAILS on CJS (`module.exports =` not tracked as export)
-- `get_references("createApplication")` — empty (CJS assignment not tracked as reference)
+- `get_exports("lib/express.js")` — found 10 CJS exports (application, request, response, Route, Router, json, etc.)
+- `get_references("render")` — found view.render() call in application.js
 
 **Zod (TypeScript monorepo, 386 files)**
 - Indexed: 6253 symbols, 8961 refs, 1434 imports
-- `find_symbol("parse")` — found 10 matches across packages, correctly shows exports
-- `find_symbol("Zod")` — found component functions, variables, types
-- `get_references("parse")` — empty (called as `schema.parse()`, stored as member expression)
+- `find_symbol("parse")` — found 10 matches across packages
+- `get_references("parse")` — 200 results (schema.parse(), zod3.parse(), etc.)
+- `get_references("z")` — 200 results (z.array(), z.string(), z.boolean(), etc.)
+- `get_references("safeParse")` — 200 results across packages
 
-**Known Limitations**
-- CJS `module.exports` and `exports.foo` not tracked as exports
-- Member-expression references: `obj.method()` is stored as `obj.method`, not `method` alone — searching for just the method name won't find these
-- `get_references` works for plain function calls but misses method calls on objects
+**Self-index (13 files)**
+- `get_references("logger")` — 18 results (all logger.info/error/debug calls)
+- `get_references("graph")` — 9 results (all graph.* method calls across tools)
+
+**Reference Matching Strategy (3-level)**
+1. Exact: `to_symbol_name = "query"` — plain function calls
+2. Bare name: `to_symbol_bare_name = "query"` — last segment of `obj.query()`
+3. Prefix: `to_symbol_name LIKE "query.%"` — all member access on the object
 
 ### What's Next (Phase 2)
 
-- [ ] Test against a large real-world project (e.g., Express, Next.js)
 - [ ] LSP integration for richer semantic data (tsserver)
 - [ ] Python support via pyright/pylsp
 - [ ] Go support via gopls
