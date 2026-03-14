@@ -6,7 +6,11 @@ import { getAllExtensions } from "./language-plugin.js";
 import { CodeGraph } from "../graph/code-graph.js";
 import { logger } from "../utils/logger.js";
 
-const IGNORE_PATTERNS = ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.git/**", "**/coverage/**", "**/__pycache__/**", "**/venv/**", "**/.venv/**"];
+const IGNORE_PATTERNS = [
+  "**/node_modules/**", "**/dist/**", "**/build/**", "**/.git/**", "**/coverage/**",
+  "**/__pycache__/**", "**/venv/**", "**/.venv/**",
+  "**/target/**", "**/out/**", "**/.gradle/**", "**/.mvn/**",
+];
 
 function isTargetFile(filePath: string): boolean {
   const extensions = getAllExtensions();
@@ -45,18 +49,29 @@ export class FileWatcher {
 
       logger.info(`Found ${files.length} files to index`);
 
-      let indexed = 0;
+      // Parse all files first (CPU-bound, tree-sitter)
+      const parseStart = Date.now();
+      const parsed: Array<{ filePath: string; content: string; symbols: import("../graph/code-graph.js").SymbolInfo[]; references: import("../graph/code-graph.js").ReferenceInfo[]; imports: import("../graph/code-graph.js").ImportInfo[] }> = [];
       for (const file of files) {
         const result = parseFile(file);
         if (result) {
-          this.graph.indexFile(file, result.content, result.symbols, result.references, result.imports);
-          indexed++;
+          parsed.push({ filePath: file, content: result.content, symbols: result.symbols, references: result.references, imports: result.imports });
         }
       }
+      const parseElapsed = Date.now() - parseStart;
+
+      // Batch insert into DB (single transaction — much faster for large repos)
+      const dbStart = Date.now();
+      const { indexed, skipped } = this.graph.indexFileBatch(parsed);
+      const dbElapsed = Date.now() - dbStart;
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
       const stats = this.graph.getStats();
-      logger.info(`Initial index complete in ${elapsed}s: ${stats.files} files, ${stats.symbols} symbols, ${stats.references} references`);
+      logger.info(
+        `Initial index complete in ${elapsed}s (parse: ${parseElapsed}ms, db: ${dbElapsed}ms): ` +
+        `${stats.files} files, ${stats.symbols} symbols, ${stats.references} references` +
+        (skipped > 0 ? ` (${skipped} unchanged)` : "")
+      );
     } finally {
       this.indexing = false;
     }

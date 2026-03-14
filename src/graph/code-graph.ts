@@ -35,7 +35,43 @@ export interface ImportInfo {
 }
 
 export class CodeGraph {
-  constructor(private db: Database.Database) {}
+  // Prepared statement cache — avoids re-preparing on every call
+  private stmts!: ReturnType<CodeGraph["prepareStatements"]>;
+  // In-memory hash cache — avoids DB lookup on unchanged files
+  private hashCache = new Map<string, string>();
+
+  constructor(private db: Database.Database) {
+    this.stmts = this.prepareStatements();
+  }
+
+  private prepareStatements() {
+    return {
+      getFileId: this.db.prepare("SELECT id FROM files WHERE path = ?"),
+      getFileHash: this.db.prepare("SELECT hash FROM files WHERE path = ?"),
+      updateFile: this.db.prepare("UPDATE files SET hash = ?, indexed_at = datetime('now') WHERE id = ?"),
+      insertFile: this.db.prepare("INSERT INTO files (path, hash) VALUES (?, ?)"),
+      deleteSymbols: this.db.prepare("DELETE FROM symbols WHERE file_id = ?"),
+      deleteImports: this.db.prepare("DELETE FROM imports WHERE file_id = ?"),
+      insertSymbol: this.db.prepare(
+        `INSERT INTO symbols (name, kind, file_id, line_start, line_end, col_start, col_end, parent_symbol_id, signature, is_exported)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ),
+      updateParent: this.db.prepare("UPDATE symbols SET parent_symbol_id = ? WHERE id = ?"),
+      insertRef: this.db.prepare(
+        `INSERT INTO references_ (from_symbol_id, to_symbol_name, to_symbol_bare_name, to_file_id, kind, line, col)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ),
+      insertImport: this.db.prepare(
+        `INSERT INTO imports (file_id, source_path, imported_name, local_name, is_default, is_namespace, line)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ),
+      deleteFile: this.db.prepare("DELETE FROM files WHERE id = ?"),
+      countFiles: this.db.prepare("SELECT COUNT(*) as c FROM files"),
+      countSymbols: this.db.prepare("SELECT COUNT(*) as c FROM symbols"),
+      countRefs: this.db.prepare("SELECT COUNT(*) as c FROM references_"),
+      countImports: this.db.prepare("SELECT COUNT(*) as c FROM imports"),
+    };
+  }
 
   getDb(): Database.Database {
     return this.db;
@@ -46,85 +82,70 @@ export class CodeGraph {
   }
 
   getFileId(filePath: string): number | undefined {
-    const row = this.db.prepare("SELECT id FROM files WHERE path = ?").get(filePath) as
-      | { id: number }
-      | undefined;
+    const row = this.stmts.getFileId.get(filePath) as { id: number } | undefined;
     return row?.id;
   }
 
   getFileHash(filePath: string): string | undefined {
-    const row = this.db.prepare("SELECT hash FROM files WHERE path = ?").get(filePath) as
-      | { hash: string }
-      | undefined;
+    // Check in-memory cache first
+    const cached = this.hashCache.get(filePath);
+    if (cached) return cached;
+    const row = this.stmts.getFileHash.get(filePath) as { hash: string } | undefined;
+    if (row) this.hashCache.set(filePath, row.hash);
     return row?.hash;
   }
 
   upsertFile(filePath: string, hash: string): number {
     const existing = this.getFileId(filePath);
     if (existing) {
-      this.db
-        .prepare("UPDATE files SET hash = ?, indexed_at = datetime('now') WHERE id = ?")
-        .run(hash, existing);
+      this.stmts.updateFile.run(hash, existing);
+      this.hashCache.set(filePath, hash);
       return existing;
     }
-    const result = this.db
-      .prepare("INSERT INTO files (path, hash) VALUES (?, ?)")
-      .run(filePath, hash);
+    const result = this.stmts.insertFile.run(filePath, hash);
+    this.hashCache.set(filePath, hash);
     return result.lastInsertRowid as number;
   }
 
   clearFileData(fileId: number) {
-    this.db.prepare("DELETE FROM symbols WHERE file_id = ?").run(fileId);
-    this.db.prepare("DELETE FROM imports WHERE file_id = ?").run(fileId);
+    this.stmts.deleteSymbols.run(fileId);
+    this.stmts.deleteImports.run(fileId);
   }
 
   insertSymbol(fileId: number, symbol: SymbolInfo): number {
-    const result = this.db
-      .prepare(
-        `INSERT INTO symbols (name, kind, file_id, line_start, line_end, col_start, col_end, parent_symbol_id, signature, is_exported)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        symbol.name,
-        symbol.kind,
-        fileId,
-        symbol.lineStart,
-        symbol.lineEnd,
-        symbol.colStart,
-        symbol.colEnd,
-        symbol.parentSymbolId ?? null,
-        symbol.signature ?? null,
-        symbol.isExported ? 1 : 0
-      );
+    const result = this.stmts.insertSymbol.run(
+      symbol.name,
+      symbol.kind,
+      fileId,
+      symbol.lineStart,
+      symbol.lineEnd,
+      symbol.colStart,
+      symbol.colEnd,
+      symbol.parentSymbolId ?? null,
+      symbol.signature ?? null,
+      symbol.isExported ? 1 : 0
+    );
     return result.lastInsertRowid as number;
   }
 
   insertReference(ref: ReferenceInfo) {
-    this.db
-      .prepare(
-        `INSERT INTO references_ (from_symbol_id, to_symbol_name, to_symbol_bare_name, to_file_id, kind, line, col)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(ref.fromSymbolId, ref.toSymbolName, ref.toSymbolBareName, ref.toFileId ?? null, ref.kind, ref.line, ref.col);
+    this.stmts.insertRef.run(
+      ref.fromSymbolId, ref.toSymbolName, ref.toSymbolBareName,
+      ref.toFileId ?? null, ref.kind, ref.line, ref.col
+    );
   }
 
   insertImport(fileId: number, imp: ImportInfo) {
-    this.db
-      .prepare(
-        `INSERT INTO imports (file_id, source_path, imported_name, local_name, is_default, is_namespace, line)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        fileId,
-        imp.sourcePath,
-        imp.importedName,
-        imp.localName,
-        imp.isDefault ? 1 : 0,
-        imp.isNamespace ? 1 : 0,
-        imp.line
-      );
+    this.stmts.insertImport.run(
+      fileId, imp.sourcePath, imp.importedName, imp.localName,
+      imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0, imp.line
+    );
   }
 
+  /**
+   * Index a single file. Wraps in a transaction.
+   * For batch indexing many files, use indexFileBatch() instead.
+   */
   indexFile(filePath: string, content: string, symbols: SymbolInfo[], references: ReferenceInfo[], imports: ImportInfo[]) {
     const hash = this.fileHash(content);
     const existingHash = this.getFileHash(filePath);
@@ -134,55 +155,79 @@ export class CodeGraph {
     }
 
     const tx = this.db.transaction(() => {
-      const fileId = this.upsertFile(filePath, hash);
-      this.clearFileData(fileId);
-
-      // First pass: insert all symbols without parent references
-      const symbolIdMap = new Map<number, number>();
-      for (let i = 0; i < symbols.length; i++) {
-        const sym = symbols[i];
-        // Temporarily clear parent — we'll set it in the second pass
-        const savedParent = sym.parentSymbolId;
-        sym.parentSymbolId = undefined;
-        const id = this.insertSymbol(fileId, sym);
-        symbolIdMap.set(i, id);
-        sym.parentSymbolId = savedParent;
-      }
-
-      // Second pass: update parent references now that all symbols have real IDs
-      const updateParent = this.db.prepare(
-        "UPDATE symbols SET parent_symbol_id = ? WHERE id = ?"
-      );
-      for (let i = 0; i < symbols.length; i++) {
-        const sym = symbols[i];
-        if (sym.parentSymbolId !== undefined) {
-          const realParentId = symbolIdMap.get(sym.parentSymbolId);
-          const realId = symbolIdMap.get(i);
-          if (realParentId !== undefined && realId !== undefined) {
-            updateParent.run(realParentId, realId);
-          }
-        }
-      }
-
-      for (const ref of references) {
-        const mappedFromId = symbolIdMap.get(ref.fromSymbolId) ?? ref.fromSymbolId;
-        this.insertReference({ ...ref, fromSymbolId: mappedFromId });
-      }
-
-      for (const imp of imports) {
-        this.insertImport(fileId, imp);
-      }
-
-      logger.info(`Indexed ${filePath}: ${symbols.length} symbols, ${references.length} refs, ${imports.length} imports`);
+      this._indexFileInner(filePath, hash, symbols, references, imports);
     });
 
     tx();
   }
 
+  /**
+   * Batch-index many files in a single transaction.
+   * Much faster for initial indexing of large repos.
+   */
+  indexFileBatch(files: Array<{ filePath: string; content: string; symbols: SymbolInfo[]; references: ReferenceInfo[]; imports: ImportInfo[] }>) {
+    let indexed = 0;
+    let skipped = 0;
+
+    const tx = this.db.transaction(() => {
+      for (const file of files) {
+        const hash = this.fileHash(file.content);
+        const existingHash = this.getFileHash(file.filePath);
+        if (existingHash === hash) {
+          skipped++;
+          continue;
+        }
+        this._indexFileInner(file.filePath, hash, file.symbols, file.references, file.imports);
+        indexed++;
+      }
+    });
+
+    tx();
+    return { indexed, skipped };
+  }
+
+  private _indexFileInner(filePath: string, hash: string, symbols: SymbolInfo[], references: ReferenceInfo[], imports: ImportInfo[]) {
+    const fileId = this.upsertFile(filePath, hash);
+    this.clearFileData(fileId);
+
+    // First pass: insert all symbols without parent references
+    const symbolIdMap = new Map<number, number>();
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i];
+      const savedParent = sym.parentSymbolId;
+      sym.parentSymbolId = undefined;
+      const id = this.insertSymbol(fileId, sym);
+      symbolIdMap.set(i, id);
+      sym.parentSymbolId = savedParent;
+    }
+
+    // Second pass: update parent references now that all symbols have real IDs
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i];
+      if (sym.parentSymbolId !== undefined) {
+        const realParentId = symbolIdMap.get(sym.parentSymbolId);
+        const realId = symbolIdMap.get(i);
+        if (realParentId !== undefined && realId !== undefined) {
+          this.stmts.updateParent.run(realParentId, realId);
+        }
+      }
+    }
+
+    for (const ref of references) {
+      const mappedFromId = symbolIdMap.get(ref.fromSymbolId) ?? ref.fromSymbolId;
+      this.insertReference({ ...ref, fromSymbolId: mappedFromId });
+    }
+
+    for (const imp of imports) {
+      this.insertImport(fileId, imp);
+    }
+  }
+
   removeFile(filePath: string) {
     const fileId = this.getFileId(filePath);
     if (fileId) {
-      this.db.prepare("DELETE FROM files WHERE id = ?").run(fileId);
+      this.stmts.deleteFile.run(fileId);
+      this.hashCache.delete(filePath);
       logger.info(`Removed file from index: ${filePath}`);
     }
   }
@@ -394,10 +439,10 @@ export class CodeGraph {
   }
 
   getStats(): { files: number; symbols: number; references: number; imports: number } {
-    const files = (this.db.prepare("SELECT COUNT(*) as c FROM files").get() as { c: number }).c;
-    const symbols = (this.db.prepare("SELECT COUNT(*) as c FROM symbols").get() as { c: number }).c;
-    const references = (this.db.prepare("SELECT COUNT(*) as c FROM references_").get() as { c: number }).c;
-    const imports = (this.db.prepare("SELECT COUNT(*) as c FROM imports").get() as { c: number }).c;
+    const files = (this.stmts.countFiles.get() as { c: number }).c;
+    const symbols = (this.stmts.countSymbols.get() as { c: number }).c;
+    const references = (this.stmts.countRefs.get() as { c: number }).c;
+    const imports = (this.stmts.countImports.get() as { c: number }).c;
     return { files, symbols, references, imports };
   }
 }

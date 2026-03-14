@@ -64,11 +64,39 @@
 - `get_type_info` (hover) — returns `import CodeGraph` type info
 - Clean shutdown with graceful LSP stop
 
-### What's Next (Phase 4)
+## Phase 4 (Performance + Rust + Java) — Status: COMPLETE
 
-- [ ] Performance optimization for large repos (>10k files)
-- [ ] Rust support via tree-sitter-rust
-- [ ] Java support via tree-sitter-java
+### What's Done
+
+- [x] Prepared statement caching — all SQL statements prepared once at construction
+- [x] In-memory hash cache — skip DB lookup for unchanged files on re-index
+- [x] Batch indexing (`indexFileBatch`) — single transaction for initial index
+- [x] Parse/DB timing breakdown in logs (e.g., `parse: 408ms, db: 79ms`)
+- [x] Rust support (functions, structs, enums, traits, impl blocks, use declarations, macro invocations)
+- [x] Java support (classes, interfaces, enums, methods, fields, annotations, inheritance, imports)
+- [x] Ignore patterns for `target/`, `out/`, `.gradle/`, `.mvn/`
+
+### Test Results
+
+**Rust — ripgrep (100 files)**
+- 82 parsed (18 failures from old grammar vs modern Rust syntax)
+- 1199 symbols, 4902 references in 0.24s (parse: 180ms, db: 20ms)
+- 863 functions, 101 structs, 50 enums, 3 traits
+
+**Java — gson (259 files)**
+- 251 parsed, 4494 symbols, 17208 references in 0.57s (parse: 408ms, db: 79ms)
+- 640 classes, 2676 methods, 26 interfaces, 25 enums, 879 fields
+- `find_symbol("JsonElement")` → `public abstract class JsonElement`
+- References to `serialize` resolve correctly with member expressions
+
+**Performance (self-index, 24 files)**
+- 0.07s total (parse: 51ms, db: 7ms)
+- Batch insert brings DB writes to ~7ms for 626 symbols + 893 refs
+
+### What's Next (Phase 5)
+
+- [ ] Performance for >10k file repos (worker threads for parallel parsing)
+- [ ] C/C++ support via tree-sitter-c / tree-sitter-cpp
 
 ---
 
