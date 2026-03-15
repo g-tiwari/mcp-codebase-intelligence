@@ -1,26 +1,32 @@
 # mcp-codebase-intelligence
 
-**Give your AI assistant a deep understanding of your codebase.**
+**Give your AI assistant a deep understanding of your codebase — without burning your context window.**
 
 [![CI](https://github.com/g-tiwari/mcp-codebase-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/g-tiwari/mcp-codebase-intelligence/actions)
+[![npm](https://img.shields.io/npm/v/mcp-codebase-intelligence)](https://www.npmjs.com/package/mcp-codebase-intelligence)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An MCP server that parses your entire codebase with tree-sitter, builds a semantic graph of symbols, references, and dependencies, and lets AI assistants query it in real time. Works with Claude Code, Cursor, VS Code, and any MCP-compatible client.
+An MCP server that parses your entire codebase with tree-sitter, builds a semantic graph of symbols, references, and dependencies, and lets AI assistants query it in real time. **18 tools, 8 languages, zero infrastructure.**
+
+Works with Claude Code, Cursor, VS Code, and any MCP-compatible client.
 
 ---
 
 ## Why?
 
-AI coding assistants are limited by what fits in their context window. When they need to understand your codebase -- find callers of a function, trace a dependency chain, or assess the impact of a change -- they resort to `grep` and guesswork.
+AI coding assistants are limited by what fits in their context window. When they need to understand your codebase — find callers of a function, trace a dependency chain, or assess the impact of a change — they resort to `grep` and guesswork, burning thousands of tokens on raw file reads.
 
-**mcp-codebase-intelligence gives them structural understanding instead.**
+**mcp-codebase-intelligence gives them structured understanding in ~200 tokens instead of 50,000.**
 
-| Without | With |
-|---------|------|
-| AI greps for function name, misses qualified calls | AI queries the symbol graph, finds all 47 callers instantly |
-| AI reads files one by one to trace imports | AI gets the full dependency tree in one call |
-| AI reviews a PR by reading the diff | AI analyzes which 12 downstream modules are affected by the change |
-| AI guesses at project structure | AI generates an architecture diagram from the actual import graph |
+| | Without | With codebase-intelligence |
+|---|---------|---------------------------|
+| **Understand a PR** | Read 1200 lines, open 23 files | `semantic_diff` → 8 risk flags in 3 seconds |
+| **Find payment logic** | `grep "payment"` → 200 results | `search_codebase "payment processing"` → 3 exact matches with docstrings |
+| **Impact of a change** | Manually trace callers for 30 min | `analyze_change_impact` → 12 dependents across 6 files, instantly |
+| **Onboard to new repo** | Read code for 2 days | `architecture_diagram` + `query_codebase` → 10 minutes |
+| **AI context cost** | Feed 50k tokens of raw files | Structured 200-token summaries |
+
+**No Docker. No cloud. No API keys. No embeddings. Just `npx`.**
 
 ---
 
@@ -120,14 +126,14 @@ Then use `list_projects` and `switch_project` tools to navigate between projects
 
 ---
 
-## 17 Tools
+## 18 Tools
 
 ### Code Navigation
 | Tool | What it does |
 |------|-------------|
-| `find_symbol` | Search for functions, classes, interfaces, types by name. Fuzzy matching, kind/scope filters. |
+| `find_symbol` | Search for functions, classes, interfaces, types by name. Fuzzy matching, kind/scope filters. Returns signatures and docstrings. |
 | `get_references` | Find all callers/users of a symbol. Transitive: follow the chain N levels deep. |
-| `get_exports` | Public API surface of any file -- all exported symbols with signatures. |
+| `get_exports` | Public API surface of any file — all exported symbols with signatures. |
 | `get_dependencies` | Import graph for a file. Transitive: see the full dependency tree. |
 | `get_call_graph` | Who calls this function? What does it call? Tree or mermaid diagram output. |
 
@@ -149,6 +155,7 @@ Then use `list_projects` and `switch_project` tools to navigate between projects
 |------|-------------|
 | `architecture_diagram` | Auto-generate a mermaid diagram of module dependencies, grouped by directory. |
 | `query_codebase` | Ask natural language questions: "find all API endpoints", "what does the orders module do?", "what depends on the database layer?" |
+| `search_codebase` | Search symbols by their docstring/comment content. Find code by what it *does*, not what it's *named*. |
 
 ### Project Management
 | Tool | What it does |
@@ -178,7 +185,7 @@ Then use `list_projects` and `switch_project` tools to navigate between projects
 | C | `.c` `.h` | tree-sitter |
 | C++ | `.cpp` `.cc` `.cxx` `.hpp` `.hxx` `.hh` | tree-sitter |
 
-All languages get symbol extraction, reference tracking, import/export analysis, and call graphs. TypeScript/JavaScript additionally get LSP-powered go-to-definition, type info, and find-implementations.
+All languages get symbol extraction, reference tracking, import/export analysis, call graphs, and **docstring/comment extraction**. TypeScript/JavaScript additionally get LSP-powered go-to-definition, type info, and find-implementations.
 
 ---
 
@@ -194,12 +201,12 @@ Source Files ──> tree-sitter AST ──> Symbol Extraction ──> SQLite Gr
                                     LSP Servers ──> Type Info (TS/JS)
 ```
 
-1. **Parse** -- tree-sitter builds ASTs for all supported files
-2. **Extract** -- language plugins walk the AST to find symbols, references, imports, inheritance
-3. **Store** -- everything goes into a SQLite database with WAL mode, prepared statements, batch transactions
-4. **Watch** -- chokidar monitors the filesystem; changed files are re-indexed incrementally
-5. **Query** -- MCP tools run recursive SQL queries against the graph (transitive references, dependency chains)
-6. **LSP** -- typescript-language-server provides type-aware intelligence for TS/JS
+1. **Parse** — tree-sitter builds ASTs for all supported files
+2. **Extract** — language plugins walk the AST to find symbols, references, imports, inheritance, and docstrings
+3. **Store** — everything goes into a SQLite database with WAL mode, prepared statements, batch transactions
+4. **Watch** — chokidar monitors the filesystem; changed files are re-indexed incrementally
+5. **Query** — MCP tools run recursive SQL queries against the graph (transitive references, dependency chains)
+6. **LSP** — typescript-language-server provides type-aware intelligence for TS/JS
 
 ### Performance
 
@@ -218,7 +225,7 @@ Tested on real-world projects: Zod, Express, gin, ripgrep, gson.
 npm test
 ```
 
-108 tests across 8 test suites covering all language parsers, grammar regression tests, the graph engine, and semantic diff.
+146 tests across 10 test suites covering all 8 language parsers, docstring extraction, grammar regression tests, the graph engine, and semantic diff.
 
 ---
 
