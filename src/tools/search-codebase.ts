@@ -1,15 +1,15 @@
 import { CodeGraph } from "../graph/code-graph.js";
 
-export const findSymbolTool = {
-  name: "find_symbol",
+export const searchCodebaseTool = {
+  name: "search_codebase",
   description:
-    "Find symbols (functions, classes, interfaces, types, variables, methods) by name with full type information and location. Supports fuzzy matching.",
+    "Search symbols by their docstring/comment content. Find functions, classes, and methods by what they do, not just their name. Useful for discovering APIs, finding implementations by description, or locating code by its documentation.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      name: {
+      query: {
         type: "string",
-        description: "Symbol name to search for (supports partial matching)",
+        description: "Text to search for in docstrings/comments (supports partial matching)",
       },
       kind: {
         type: "string",
@@ -25,23 +25,29 @@ export const findSymbolTool = {
         description: "Maximum results to return (default: 20)",
       },
     },
-    required: ["name"],
+    required: ["query"],
   },
 };
 
-export function handleFindSymbol(
+export function handleSearchCodebase(
   graph: CodeGraph,
-  args: { name: string; kind?: string; scope?: string; limit?: number }
+  args: { query: string; kind?: string; scope?: string; limit?: number }
 ) {
-  const results = graph.findSymbols({
-    name: args.name,
+  const results = graph.searchByDocstring(args.query, {
     kind: args.kind,
     scope: args.scope,
     limit: args.limit ?? 20,
   });
 
   if (results.length === 0) {
-    return { content: [{ type: "text" as const, text: `No symbols found matching "${args.name}"` }] };
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `No symbols found with docstrings matching "${args.query}"`,
+        },
+      ],
+    };
   }
 
   const formatted = results.map((s) => {
@@ -55,7 +61,7 @@ export function handleFindSymbol(
     content: [
       {
         type: "text" as const,
-        text: `Found ${results.length} symbol(s) matching "${args.name}":\n\n${formatted.join("\n\n")}`,
+        text: `Found ${results.length} symbol(s) with docstrings matching "${args.query}":\n\n${formatted.join("\n\n")}`,
       },
     ],
   };

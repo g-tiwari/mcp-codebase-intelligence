@@ -3,6 +3,7 @@ import Python from "tree-sitter-python";
 import { SymbolInfo, ReferenceInfo, ImportInfo } from "../graph/code-graph.js";
 import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
+import { getPythonDocstring, getPrecedingComment } from "./docstring-extractor.js";
 
 const pyParser = new Parser();
 pyParser.setLanguage(Python as unknown as Parser.Language);
@@ -52,6 +53,7 @@ function walkPython(
           parentSymbolId: parentIndex,
           isExported: !isPrivate || isDunder,
           signature: extractPySignature(node),
+          docstring: getPythonDocstring(node) ?? getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -76,6 +78,7 @@ function walkPython(
           parentSymbolId: parentIndex,
           isExported: !isPrivate,
           signature: `class ${nameNode.text}`,
+          docstring: getPythonDocstring(node) ?? getPrecedingComment(node),
         };
 
         // Track superclasses

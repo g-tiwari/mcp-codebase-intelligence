@@ -21,6 +21,7 @@ import { findImplementationsTool, handleFindImplementations } from "./tools/find
 import { semanticDiffTool, handleSemanticDiff } from "./tools/semantic-diff.js";
 import { architectureDiagramTool, handleArchitectureDiagram } from "./tools/architecture-diagram.js";
 import { naturalLanguageQueryTool, handleNaturalLanguageQuery } from "./tools/natural-language-query.js";
+import { searchCodebaseTool, handleSearchCodebase } from "./tools/search-codebase.js";
 import {
   listProjectsTool, handleListProjects,
   switchProjectTool, handleSwitchProject,
@@ -256,6 +257,21 @@ async function main() {
       query: z.string().describe("Natural language question about the codebase"),
     },
     (args) => handleNaturalLanguageQuery(getActive().graph, args)
+  );
+
+  server.tool(
+    searchCodebaseTool.name,
+    searchCodebaseTool.description,
+    {
+      query: z.string().describe("Text to search for in docstrings/comments"),
+      kind: z
+        .enum(["function", "class", "interface", "type", "variable", "method", "enum", "property"])
+        .optional()
+        .describe("Optional: filter by symbol kind"),
+      scope: z.string().optional().describe("Optional: limit search to files under this path prefix"),
+      limit: z.number().optional().describe("Maximum results to return (default: 20)"),
+    },
+    (args) => handleSearchCodebase(getActive().graph, args)
   );
 
   // --- Start indexing and MCP server ---

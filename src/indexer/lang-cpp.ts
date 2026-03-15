@@ -4,6 +4,7 @@ import Cpp from "tree-sitter-cpp";
 import { SymbolInfo, ReferenceInfo, ImportInfo } from "../graph/code-graph.js";
 import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
+import { getPrecedingComment } from "./docstring-extractor.js";
 
 const cParser = new Parser();
 cParser.setLanguage(C as unknown as Parser.Language);
@@ -141,6 +142,7 @@ function walkCpp(
             parentSymbolId: parentIndex,
             isExported: isCpp ? isPublicCpp(node) : isExportedC(node),
             signature: extractFunctionSignature(node, isCpp),
+            docstring: getPrecedingComment(node),
           };
           const idx = symbols.length;
           symbols.push(sym);
@@ -194,6 +196,7 @@ function walkCpp(
           parentSymbolId: parentIndex,
           isExported: isCpp ? isPublicCpp(node) : isExportedC(node),
           signature: `${node.type === "struct_specifier" ? "struct" : "union"} ${nameNode.text}`,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -217,6 +220,7 @@ function walkCpp(
           parentSymbolId: parentIndex,
           isExported: isExportedC(node),
           signature: `class ${nameNode.text}`,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);

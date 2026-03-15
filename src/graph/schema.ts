@@ -26,6 +26,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
       parent_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
       signature TEXT,
       is_exported INTEGER NOT NULL DEFAULT 0,
+      docstring TEXT,
       UNIQUE(name, kind, file_id, line_start)
     );
 

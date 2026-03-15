@@ -3,6 +3,7 @@ import Rust from "tree-sitter-rust";
 import { SymbolInfo, ReferenceInfo, ImportInfo } from "../graph/code-graph.js";
 import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
+import { getPrecedingComment } from "./docstring-extractor.js";
 
 const rustParser = new Parser();
 rustParser.setLanguage(Rust as unknown as Parser.Language);
@@ -46,6 +47,7 @@ function walkRust(
           parentSymbolId: parentIndex,
           isExported: isPublic(node),
           signature: extractRustFnSig(node),
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -69,6 +71,7 @@ function walkRust(
           parentSymbolId: parentIndex,
           isExported: isPublic(node),
           signature: `struct ${nameNode.text}`,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -92,6 +95,7 @@ function walkRust(
           parentSymbolId: parentIndex,
           isExported: isPublic(node),
           signature: `enum ${nameNode.text}`,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -115,6 +119,7 @@ function walkRust(
           parentSymbolId: parentIndex,
           isExported: isPublic(node),
           signature: `trait ${nameNode.text}`,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);

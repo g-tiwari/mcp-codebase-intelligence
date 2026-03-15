@@ -3,6 +3,7 @@ import Go from "tree-sitter-go";
 import { SymbolInfo, ReferenceInfo, ImportInfo } from "../graph/code-graph.js";
 import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
+import { getPrecedingComment } from "./docstring-extractor.js";
 
 const goParser = new Parser();
 goParser.setLanguage(Go as unknown as Parser.Language);
@@ -43,6 +44,7 @@ function walkGo(
           parentSymbolId: parentIndex,
           isExported: isExportedGo(nameNode.text),
           signature: extractGoFuncSignature(node),
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -82,6 +84,7 @@ function walkGo(
           parentSymbolId: parentIndex,
           isExported: isExportedGo(nameNode.text),
           signature: receiverType ? `(${receiverType}) ${sig}` : sig,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -114,6 +117,7 @@ function walkGo(
               parentSymbolId: parentIndex,
               isExported: isExportedGo(nameNode.text),
               signature: `type ${nameNode.text} ${typeNode?.type === "interface_type" ? "interface" : typeNode?.type === "struct_type" ? "struct" : typeNode?.text ?? ""}`,
+              docstring: getPrecedingComment(node),
             };
             const idx = symbols.length;
             symbols.push(sym);

@@ -13,6 +13,7 @@ export interface SymbolInfo {
   parentSymbolId?: number;
   signature?: string;
   isExported: boolean;
+  docstring?: string;
 }
 
 export interface ReferenceInfo {
@@ -53,8 +54,8 @@ export class CodeGraph {
       deleteSymbols: this.db.prepare("DELETE FROM symbols WHERE file_id = ?"),
       deleteImports: this.db.prepare("DELETE FROM imports WHERE file_id = ?"),
       insertSymbol: this.db.prepare(
-        `INSERT INTO symbols (name, kind, file_id, line_start, line_end, col_start, col_end, parent_symbol_id, signature, is_exported)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO symbols (name, kind, file_id, line_start, line_end, col_start, col_end, parent_symbol_id, signature, is_exported, docstring)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       updateParent: this.db.prepare("UPDATE symbols SET parent_symbol_id = ? WHERE id = ?"),
       insertRef: this.db.prepare(
@@ -123,7 +124,8 @@ export class CodeGraph {
       symbol.colEnd,
       symbol.parentSymbolId ?? null,
       symbol.signature ?? null,
-      symbol.isExported ? 1 : 0
+      symbol.isExported ? 1 : 0,
+      symbol.docstring ?? null
     );
     return result.lastInsertRowid as number;
   }
@@ -249,6 +251,7 @@ export class CodeGraph {
     colEnd: number;
     signature: string | null;
     isExported: boolean;
+    docstring: string | null;
   }> {
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -271,7 +274,8 @@ export class CodeGraph {
 
     const sql = `
       SELECT s.name, s.kind, f.path as filePath, s.line_start as lineStart, s.line_end as lineEnd,
-             s.col_start as colStart, s.col_end as colEnd, s.signature, s.is_exported as isExported
+             s.col_start as colStart, s.col_end as colEnd, s.signature, s.is_exported as isExported,
+             s.docstring
       FROM symbols s
       JOIN files f ON s.file_id = f.id
       ${where}
@@ -293,6 +297,60 @@ export class CodeGraph {
       colStart: number;
       colEnd: number;
       signature: string | null;
+      isExported: boolean;
+      docstring: string | null;
+    }>;
+  }
+
+  searchByDocstring(query: string, options?: {
+    kind?: string;
+    scope?: string;
+    limit?: number;
+  }): Array<{
+    name: string;
+    kind: string;
+    filePath: string;
+    lineStart: number;
+    lineEnd: number;
+    signature: string | null;
+    docstring: string | null;
+    isExported: boolean;
+  }> {
+    const conditions: string[] = ["s.docstring IS NOT NULL AND s.docstring LIKE ?"];
+    const params: unknown[] = [`%${query}%`];
+
+    if (options?.kind) {
+      conditions.push("s.kind = ?");
+      params.push(options.kind);
+    }
+    if (options?.scope) {
+      conditions.push("f.path LIKE ?");
+      params.push(`${options.scope}%`);
+    }
+
+    const limit = options?.limit ?? 50;
+    const where = `WHERE ${conditions.join(" AND ")}`;
+
+    const sql = `
+      SELECT s.name, s.kind, f.path as filePath, s.line_start as lineStart, s.line_end as lineEnd,
+             s.signature, s.docstring, s.is_exported as isExported
+      FROM symbols s
+      JOIN files f ON s.file_id = f.id
+      ${where}
+      ORDER BY s.is_exported DESC, f.path
+      LIMIT ?
+    `;
+
+    params.push(limit);
+
+    return this.db.prepare(sql).all(...params) as Array<{
+      name: string;
+      kind: string;
+      filePath: string;
+      lineStart: number;
+      lineEnd: number;
+      signature: string | null;
+      docstring: string | null;
       isExported: boolean;
     }>;
   }

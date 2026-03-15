@@ -3,6 +3,7 @@ import Java from "tree-sitter-java";
 import { SymbolInfo, ReferenceInfo, ImportInfo } from "../graph/code-graph.js";
 import { type LanguagePlugin, registerLanguage } from "./language-plugin.js";
 import { bareName } from "./tree-sitter-indexer.js";
+import { getPrecedingComment } from "./docstring-extractor.js";
 
 const javaParser = new Parser();
 javaParser.setLanguage(Java as unknown as Parser.Language);
@@ -57,6 +58,7 @@ function walkJava(
           parentSymbolId: parentIndex,
           isExported: isPublicJava(node),
           signature: buildClassSignature(node, nameNode.text),
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -120,6 +122,7 @@ function walkJava(
           parentSymbolId: parentIndex,
           isExported: isPublicJava(node),
           signature: `interface ${nameNode.text}`,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
@@ -173,6 +176,7 @@ function walkJava(
           parentSymbolId: parentIndex,
           isExported: isPublicJava(node),
           signature: extractJavaMethodSig(node),
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);

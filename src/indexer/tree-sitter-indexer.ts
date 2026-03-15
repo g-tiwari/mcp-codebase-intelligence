@@ -9,6 +9,7 @@ import {
   registerLanguage,
   getPluginForFile,
 } from "./language-plugin.js";
+import { getPrecedingComment } from "./docstring-extractor.js";
 
 const tsParser = new Parser();
 tsParser.setLanguage(TypeScript.typescript as unknown as Parser.Language);
@@ -85,6 +86,7 @@ function walkNode(
           colEnd: node.endPosition.column,
           isExported: hasExportModifier(node),
           signature: extractSignature(node, "function"),
+          docstring: getPrecedingComment(node),
         };
         if (parentIndex !== undefined) sym.parentSymbolId = parentIndex;
         const idx = symbols.length;
@@ -108,6 +110,7 @@ function walkNode(
           colEnd: node.endPosition.column,
           isExported: hasExportModifier(node),
           signature: extractSignature(node, "class"),
+          docstring: getPrecedingComment(node),
         };
         if (parentIndex !== undefined) sym.parentSymbolId = parentIndex;
         const idx = symbols.length;
@@ -151,6 +154,7 @@ function walkNode(
           colEnd: node.endPosition.column,
           isExported: hasExportModifier(node),
           signature: extractSignature(node, "interface"),
+          docstring: getPrecedingComment(node),
         };
         if (parentIndex !== undefined) sym.parentSymbolId = parentIndex;
         const idx = symbols.length;
@@ -215,6 +219,7 @@ function walkNode(
             node.type === "method_definition"
               ? extractSignature(node, "method")
               : undefined,
+          docstring: getPrecedingComment(node),
         };
         const idx = symbols.length;
         symbols.push(sym);
