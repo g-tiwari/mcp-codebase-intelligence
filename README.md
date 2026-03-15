@@ -29,7 +29,13 @@ AI coding assistants are limited by what fits in their context window. When they
 ### One-liner (no clone needed)
 
 ```bash
-# Add to Claude Code via npx
+# Add to Claude Code via npx — auto-detects your project from cwd
+claude mcp add codebase-intelligence npx mcp-codebase-intelligence
+```
+
+Or with an explicit project path:
+
+```bash
 claude mcp add codebase-intelligence \
   npx mcp-codebase-intelligence \
   -e PROJECT_ROOT=/path/to/your/project
@@ -69,7 +75,52 @@ That's it. The server indexes your codebase on startup and watches for changes.
 
 ---
 
-## 14 Tools
+## Multi-Project Support
+
+Work across multiple repos, monorepos, or a mix of both — from a single MCP server.
+
+### Auto-detection (zero config)
+
+When no config is set, the server auto-detects your project:
+
+1. Finds the git root from your current directory
+2. Detects monorepo markers (pnpm, lerna, nx, npm/yarn workspaces, go.work, Cargo workspace)
+3. Indexes accordingly
+
+### Multi-repo projects
+
+Use `PROJECT_ROOTS` for projects spanning multiple repositories:
+
+```bash
+claude mcp add codebase-intelligence \
+  npx mcp-codebase-intelligence \
+  -e PROJECT_ROOTS="/code/shared-models,/code/api-gateway,/code/android-app"
+```
+
+### Config file (power users)
+
+Create `.codegraph.json` in your project root (or `~/.codegraph/config.json` for user-level config):
+
+```json
+{
+  "projects": {
+    "tv-backend": {
+      "root": "/code/monorepo",
+      "include": ["packages/api-gateway", "packages/shared-models"],
+      "roots": ["/code/android-app", "/code/webos-app"]
+    },
+    "music-service": {
+      "roots": ["/code/music-api", "/code/music-models"]
+    }
+  }
+}
+```
+
+Then use `list_projects` and `switch_project` tools to navigate between projects.
+
+---
+
+## 17 Tools
 
 ### Code Navigation
 | Tool | What it does |
@@ -90,7 +141,7 @@ That's it. The server indexes your codebase on startup and watches for changes.
 ### Change Analysis
 | Tool | What it does |
 |------|-------------|
-| `semantic_diff` | Feed it `git diff` output. It identifies affected symbols, finds all downstream dependents, and flags breaking changes and high-impact modifications. |
+| `semantic_diff` | Feed it a `git_ref` (e.g. `HEAD~1`). It identifies affected symbols, finds all downstream dependents, and flags breaking changes. |
 | `analyze_change_impact` | Point it at specific lines in a file. It tells you which symbols are affected and who depends on them. |
 
 ### Architecture & Discovery
@@ -98,6 +149,13 @@ That's it. The server indexes your codebase on startup and watches for changes.
 |------|-------------|
 | `architecture_diagram` | Auto-generate a mermaid diagram of module dependencies, grouped by directory. |
 | `query_codebase` | Ask natural language questions: "find all API endpoints", "what does the orders module do?", "what depends on the database layer?" |
+
+### Project Management
+| Tool | What it does |
+|------|-------------|
+| `list_projects` | Show all configured projects, their roots, and index stats. |
+| `switch_project` | Change active project context. All tools operate against the selected project. |
+| `add_project` | Add a new project at runtime. Indexes immediately and persists to config. |
 
 ### Admin
 | Tool | What it does |
@@ -107,7 +165,7 @@ That's it. The server indexes your codebase on startup and watches for changes.
 
 ---
 
-## 6 Languages
+## 8 Languages
 
 | Language | Extensions | Parser |
 |----------|-----------|--------|
@@ -117,6 +175,8 @@ That's it. The server indexes your codebase on startup and watches for changes.
 | Go | `.go` | tree-sitter |
 | Rust | `.rs` | tree-sitter |
 | Java | `.java` | tree-sitter |
+| C | `.c` `.h` | tree-sitter |
+| C++ | `.cpp` `.cc` `.cxx` `.hpp` `.hxx` `.hh` | tree-sitter |
 
 All languages get symbol extraction, reference tracking, import/export analysis, and call graphs. TypeScript/JavaScript additionally get LSP-powered go-to-definition, type info, and find-implementations.
 
@@ -158,17 +218,27 @@ Tested on real-world projects: Zod, Express, gin, ripgrep, gson.
 npm test
 ```
 
-108 tests across 8 test suites covering all 6 language parsers, grammar regression tests, the graph engine, and semantic diff.
+108 tests across 8 test suites covering all language parsers, grammar regression tests, the graph engine, and semantic diff.
 
 ---
 
-## Environment Variables
+## Configuration
+
+### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PROJECT_ROOT` | Path to the codebase to index (required) | `cwd()` |
-| `DB_PATH` | Path to SQLite database file | `$PROJECT_ROOT/.codegraph/index.db` |
+| `PROJECT_ROOT` | Path to a single codebase to index | git root of `cwd()` |
+| `PROJECT_ROOTS` | Comma-separated paths for multi-repo projects | — |
+| `DB_PATH` | Path to SQLite database file | `~/.codegraph/graphs/<project>.db` |
 | `LOG_LEVEL` | Logging verbosity: debug, info, warn, error | `info` |
+
+### Config Files
+
+| File | Scope | Purpose |
+|------|-------|---------|
+| `.codegraph.json` | Project (check into git) | Define project roots, monorepo scoping |
+| `~/.codegraph/config.json` | User | Personal multi-project setup |
 
 ---
 

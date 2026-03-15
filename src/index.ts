@@ -6,6 +6,7 @@ import "./indexer/lang-python.js";
 import "./indexer/lang-go.js";
 import "./indexer/lang-rust.js";
 import "./indexer/lang-java.js";
+import "./indexer/lang-cpp.js";
 import { findSymbolTool, handleFindSymbol } from "./tools/find-symbol.js";
 import { getReferencesTool, handleGetReferences } from "./tools/get-references.js";
 import { getExportsTool, handleGetExports } from "./tools/get-exports.js";
