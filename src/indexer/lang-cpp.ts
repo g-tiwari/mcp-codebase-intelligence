@@ -222,21 +222,22 @@ function walkCpp(
         symbols.push(sym);
 
         // Extract base classes (inheritance)
-        const baseClause = node.childForFieldName("base_clause");
-        if (baseClause) {
-          for (let i = 0; i < baseClause.namedChildCount; i++) {
-            const baseClass = baseClause.namedChild(i);
-            if (baseClass?.type === "base_class_clause") {
-              const typeNode = baseClass.childForFieldName("type");
-              if (typeNode) {
-                const baseName = extractIdentifierName(typeNode);
+        // base_class_clause is a direct child of class_specifier, not a field
+        for (let i = 0; i < node.namedChildCount; i++) {
+          const child = node.namedChild(i);
+          if (child?.type === "base_class_clause") {
+            // base_class_clause contains access_specifier + type_identifier children
+            for (let j = 0; j < child.namedChildCount; j++) {
+              const baseChild = child.namedChild(j);
+              if (baseChild?.type === "type_identifier" || baseChild?.type === "qualified_identifier") {
+                const baseName = baseChild.text;
                 references.push({
                   fromSymbolId: idx,
                   toSymbolName: baseName,
                   toSymbolBareName: bareName(baseName),
                   kind: "extends",
-                  line: baseClass.startPosition.row + 1,
-                  col: baseClass.startPosition.column,
+                  line: baseChild.startPosition.row + 1,
+                  col: baseChild.startPosition.column,
                 });
               }
             }

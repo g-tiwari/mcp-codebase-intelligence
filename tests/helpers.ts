@@ -7,6 +7,7 @@ import "../src/indexer/lang-python.js";
 import "../src/indexer/lang-go.js";
 import "../src/indexer/lang-rust.js";
 import "../src/indexer/lang-java.js";
+import "../src/indexer/lang-cpp.js";
 
 export { parseSource };
 
