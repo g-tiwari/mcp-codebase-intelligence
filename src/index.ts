@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import path from "path";
-import { initializeDatabase } from "./graph/schema.js";
-import { CodeGraph } from "./graph/code-graph.js";
-import { FileWatcher } from "./indexer/file-watcher.js";
 // Language plugins — imported for side-effect (registration)
 import "./indexer/lang-python.js";
 import "./indexer/lang-go.js";
@@ -24,44 +20,76 @@ import { findImplementationsTool, handleFindImplementations } from "./tools/find
 import { semanticDiffTool, handleSemanticDiff } from "./tools/semantic-diff.js";
 import { architectureDiagramTool, handleArchitectureDiagram } from "./tools/architecture-diagram.js";
 import { naturalLanguageQueryTool, handleNaturalLanguageQuery } from "./tools/natural-language-query.js";
-import { LspManager } from "./lsp/lsp-manager.js";
+import {
+  listProjectsTool, handleListProjects,
+  switchProjectTool, handleSwitchProject,
+  addProjectTool, handleAddProject,
+} from "./tools/project-tools.js";
+import { ProjectManager } from "./project-manager.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 
-const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
-const DB_PATH = process.env.DB_PATH || path.join(PROJECT_ROOT, ".codegraph", "index.db");
-
 async function main() {
-  // Validate PROJECT_ROOT exists and is a directory
-  const { existsSync, statSync } = await import("fs");
-  if (!existsSync(PROJECT_ROOT)) {
-    logger.error(`PROJECT_ROOT does not exist: ${PROJECT_ROOT}`);
+  // Initialize project manager (handles all config resolution)
+  const pm = new ProjectManager();
+  await pm.initialize();
+
+  const active = pm.active;
+  if (!active) {
+    logger.error("No valid project roots found. Set PROJECT_ROOT, PROJECT_ROOTS, or create .codegraph.json");
     process.exit(1);
   }
-  if (!statSync(PROJECT_ROOT).isDirectory()) {
-    logger.error(`PROJECT_ROOT is not a directory: ${PROJECT_ROOT}`);
-    process.exit(1);
-  }
 
-  logger.info(`Starting mcp-codebase-intelligence for ${PROJECT_ROOT}`);
-
-  // Ensure DB directory exists
-  const { mkdirSync } = await import("fs");
-  mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
-  // Initialize database and graph
-  const db = initializeDatabase(DB_PATH);
-  const graph = new CodeGraph(db);
-  const watcher = new FileWatcher(PROJECT_ROOT, graph);
+  const projectDesc = pm.listProjects().map(p =>
+    `${p.name}${p.active ? " (active)" : ""}: ${p.roots.join(", ")}`
+  ).join("; ");
 
   // Create MCP server
   const server = new McpServer({
     name: "codebase-intelligence",
-    version: "0.1.0",
-    description: `Semantic code intelligence for the project at: ${PROJECT_ROOT}. All tools in this server operate on this indexed project, not the user's current working directory.`,
+    version: "0.2.0",
+    description: `Semantic code intelligence. Projects: ${projectDesc}. Use list_projects to see all projects and switch_project to change context.`,
   });
 
-  // Register tools
+  // Helper to get active graph/project (throws clear error if none)
+  function getActive() {
+    const a = pm.active;
+    if (!a) throw new Error("No active project. Use list_projects and switch_project.");
+    return a;
+  }
+
+  // --- Project management tools ---
+
+  server.tool(
+    listProjectsTool.name,
+    listProjectsTool.description,
+    {},
+    () => handleListProjects(pm)
+  );
+
+  server.tool(
+    switchProjectTool.name,
+    switchProjectTool.description,
+    {
+      project_name: z.string().describe("Name of the project to switch to"),
+    },
+    (args) => handleSwitchProject(pm, args)
+  );
+
+  server.tool(
+    addProjectTool.name,
+    addProjectTool.description,
+    {
+      project_name: z.string().describe("Name for the new project"),
+      root: z.string().optional().describe("Single root path (for a repo or monorepo)"),
+      roots: z.string().optional().describe("Comma-separated root paths (for multi-repo projects)"),
+      include: z.string().optional().describe("Comma-separated relative paths to include within root (for monorepo scoping)"),
+    },
+    (args) => handleAddProject(pm, args)
+  );
+
+  // --- Code navigation tools ---
+
   server.tool(
     findSymbolTool.name,
     findSymbolTool.description,
@@ -74,7 +102,7 @@ async function main() {
       scope: z.string().optional().describe("Optional: limit search to files under this path prefix"),
       limit: z.number().optional().describe("Maximum results to return (default: 20)"),
     },
-    (args) => handleFindSymbol(graph, args)
+    (args) => handleFindSymbol(getActive().graph, args)
   );
 
   server.tool(
@@ -87,7 +115,7 @@ async function main() {
         .optional()
         .describe("How many levels of transitive references to follow (1 = direct only, default: 1, max: 10)"),
     },
-    (args) => handleGetReferences(graph, args)
+    (args) => handleGetReferences(getActive().graph, args)
   );
 
   server.tool(
@@ -96,7 +124,7 @@ async function main() {
     {
       file_path: z.string().describe("Absolute path to the file to inspect"),
     },
-    (args) => handleGetExports(graph, args)
+    (args) => handleGetExports(getActive().graph, args)
   );
 
   server.tool(
@@ -109,21 +137,21 @@ async function main() {
         .optional()
         .describe("How many levels of transitive dependencies to follow (default: 1, max: 5)"),
     },
-    (args) => handleGetDependencies(graph, args)
+    (args) => handleGetDependencies(getActive().graph, args)
   );
 
   server.tool(
     getStatsTool.name,
     getStatsTool.description,
     {},
-    () => handleGetStats(graph, PROJECT_ROOT)
+    () => handleGetStats(getActive().graph, pm.getPrimaryRoot() || undefined)
   );
 
   server.tool(
     reindexTool.name,
     reindexTool.description,
     {},
-    async () => handleReindex(watcher)
+    async () => handleReindex(getActive().watcher)
   );
 
   server.tool(
@@ -138,7 +166,7 @@ async function main() {
         .optional()
         .describe("How many levels of transitive dependents to follow (1 = direct only, default: 2, max: 10)"),
     },
-    (args) => handleAnalyzeChangeImpact(graph, args)
+    (args) => handleAnalyzeChangeImpact(getActive().graph, args)
   );
 
   server.tool(
@@ -156,11 +184,10 @@ async function main() {
         .optional()
         .describe("Output format (default: tree)"),
     },
-    (args) => handleGetCallGraph(graph, args)
+    (args) => handleGetCallGraph(getActive().graph, args)
   );
 
-  // Register LSP-powered tools
-  const lspManager = new LspManager(PROJECT_ROOT);
+  // --- LSP-powered tools ---
 
   server.tool(
     gotoDefinitionTool.name,
@@ -170,7 +197,7 @@ async function main() {
       line: z.number().describe("Line number (1-based)"),
       character: z.number().describe("Column number (0-based)"),
     },
-    (args) => handleGotoDefinition(lspManager, args)
+    (args) => handleGotoDefinition(getActive().lspManager, args)
   );
 
   server.tool(
@@ -181,7 +208,7 @@ async function main() {
       line: z.number().describe("Line number (1-based)"),
       character: z.number().describe("Column number (0-based)"),
     },
-    (args) => handleGetTypeInfo(lspManager, args)
+    (args) => handleGetTypeInfo(getActive().lspManager, args)
   );
 
   server.tool(
@@ -192,8 +219,10 @@ async function main() {
       line: z.number().describe("Line number (1-based)"),
       character: z.number().describe("Column number (0-based)"),
     },
-    (args) => handleFindImplementations(lspManager, args)
+    (args) => handleFindImplementations(getActive().lspManager, args)
   );
+
+  // --- Change analysis tools ---
 
   server.tool(
     semanticDiffTool.name,
@@ -203,8 +232,10 @@ async function main() {
       diff: z.string().optional().describe("Raw unified diff text. Only use if git_ref is not applicable."),
       depth: z.number().optional().describe("Transitive dependency depth (default: 2, max: 5)"),
     },
-    (args) => handleSemanticDiff(graph, args, PROJECT_ROOT)
+    (args) => handleSemanticDiff(getActive().graph, args, pm.getPrimaryRoot() || undefined)
   );
+
+  // --- Architecture & discovery tools ---
 
   server.tool(
     architectureDiagramTool.name,
@@ -214,7 +245,7 @@ async function main() {
       max_depth: z.number().optional().describe("Maximum directory nesting depth for subgraph grouping (default: 2)"),
       format: z.enum(["mermaid", "text"]).optional().describe("Output format (default: mermaid)"),
     },
-    (args) => handleArchitectureDiagram(graph, args, PROJECT_ROOT)
+    (args) => handleArchitectureDiagram(getActive().graph, args, pm.getPrimaryRoot() || undefined)
   );
 
   server.tool(
@@ -223,24 +254,12 @@ async function main() {
     {
       query: z.string().describe("Natural language question about the codebase"),
     },
-    (args) => handleNaturalLanguageQuery(graph, args)
+    (args) => handleNaturalLanguageQuery(getActive().graph, args)
   );
 
-  // Perform initial indexing (tree-sitter — fast)
-  await watcher.initialIndex();
-  watcher.startWatching();
+  // --- Start indexing and MCP server ---
 
-  // Start LSP servers in background (slow — don't block MCP)
-  lspManager.start().then(() => {
-    const servers = lspManager.getActiveServers();
-    if (servers.length > 0) {
-      logger.info(`LSP servers active: ${servers.join(", ")}`);
-    } else {
-      logger.info("No LSP servers started (tools still work via tree-sitter)");
-    }
-  }).catch((err) => {
-    logger.warn("LSP startup failed (non-fatal)", err);
-  });
+  await pm.startAll();
 
   // Start MCP server on stdio
   const transport = new StdioServerTransport();
@@ -251,9 +270,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down...");
-    await watcher.stop();
-    await lspManager.stop();
-    db.close();
+    await pm.shutdown();
     process.exit(0);
   };
 

@@ -20,17 +20,20 @@ function isTargetFile(filePath: string): boolean {
 export class FileWatcher {
   private watcher: FSWatcher | null = null;
   private indexing = false;
+  private rootPaths: string[];
 
   constructor(
-    private rootPath: string,
+    rootPathOrPaths: string | string[],
     private graph: CodeGraph
-  ) {}
+  ) {
+    this.rootPaths = Array.isArray(rootPathOrPaths) ? rootPathOrPaths : [rootPathOrPaths];
+  }
 
   async initialIndex(): Promise<void> {
     if (this.indexing) return;
     this.indexing = true;
 
-    logger.info(`Starting initial index of ${this.rootPath}`);
+    logger.info(`Starting initial index of ${this.rootPaths.length} root(s): ${this.rootPaths.join(", ")}`);
     const startTime = Date.now();
 
     try {
@@ -38,21 +41,25 @@ export class FileWatcher {
       const patterns = extensions.map((ext) => `**/*${ext}`);
       const files: string[] = [];
 
-      for (const pattern of patterns) {
-        const matched = await glob(pattern, {
-          cwd: this.rootPath,
-          absolute: true,
-          ignore: IGNORE_PATTERNS,
-        });
-        files.push(...matched);
+      for (const rootPath of this.rootPaths) {
+        for (const pattern of patterns) {
+          const matched = await glob(pattern, {
+            cwd: rootPath,
+            absolute: true,
+            ignore: IGNORE_PATTERNS,
+          });
+          files.push(...matched);
+        }
       }
 
-      logger.info(`Found ${files.length} files to index`);
+      // Deduplicate (in case roots overlap)
+      const uniqueFiles = [...new Set(files)];
+      logger.info(`Found ${uniqueFiles.length} files to index`);
 
       // Parse all files first (CPU-bound, tree-sitter)
       const parseStart = Date.now();
       const parsed: Array<{ filePath: string; content: string; symbols: import("../graph/code-graph.js").SymbolInfo[]; references: import("../graph/code-graph.js").ReferenceInfo[]; imports: import("../graph/code-graph.js").ImportInfo[] }> = [];
-      for (const file of files) {
+      for (const file of uniqueFiles) {
         const result = parseFile(file);
         if (result) {
           parsed.push({ filePath: file, content: result.content, symbols: result.symbols, references: result.references, imports: result.imports });
@@ -79,7 +86,12 @@ export class FileWatcher {
 
   startWatching(): void {
     const extensions = getAllExtensions();
-    const watchPatterns = extensions.map((ext) => path.join(this.rootPath, "**", `*${ext}`));
+    const watchPatterns: string[] = [];
+    for (const rootPath of this.rootPaths) {
+      for (const ext of extensions) {
+        watchPatterns.push(path.join(rootPath, "**", `*${ext}`));
+      }
+    }
 
     this.watcher = watch(watchPatterns, {
       ignored: IGNORE_PATTERNS,
@@ -93,7 +105,7 @@ export class FileWatcher {
       .on("change", (filePath) => this.handleFileChange(filePath))
       .on("unlink", (filePath) => this.handleFileRemove(filePath));
 
-    logger.info(`Watching for file changes in ${this.rootPath}`);
+    logger.info(`Watching for file changes in ${this.rootPaths.length} root(s)`);
   }
 
   private handleFileChange(filePath: string) {
