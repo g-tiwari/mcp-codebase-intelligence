@@ -1,6 +1,6 @@
 {
   "name": "mcp-codebase-intelligence",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server providing semantic code intelligence — symbol search, references, call graphs, impact analysis, and architecture diagrams via tree-sitter",
   "type": "module",
   "main": "dist/index.js",

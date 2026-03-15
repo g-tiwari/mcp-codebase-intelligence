@@ -49,7 +49,7 @@ async function main() {
   // Create MCP server
   const server = new McpServer({
     name: "codebase-intelligence",
-    version: "0.2.0",
+    version: "0.3.0",
     description: `Semantic code intelligence. Projects: ${projectDesc}. Use list_projects to see all projects and switch_project to change context.`,
   });
 
